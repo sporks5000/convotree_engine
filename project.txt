@@ -1,0 +1,214 @@
+A format for storing conversation trees in JSON blobs
+
+* Outer shell is an array
+* If an item is a string, that string is interpreted as HTML and output as part of the conversation
+* The ability to represent if/then blocks
+* The ability to represent variables being updated
+* The ability to represent choices for the user
+* The ability to represent visual changes (background images)
+
+
+Conversation items:
+	[
+		'<b>Robert:</b> I feel like this is a conversation tree.',
+		'<b>Robert:</b> Is that what we're doing here?',
+		'<b>Dennis:</b> Ayup.',
+		### NOTE: DO NOT actully do items like this. Only use this formatting for examples. Use the enhanced way below
+	]
+
+ENHANED conversation items:
+	[
+		{
+			type => 'item',
+			text => [
+				[
+					'name', ### The first part is the class of the span that the item will be put into
+					'Robert', ### And this is the text
+				],
+				[
+					'spoken',
+					'This is what I, Robert, am saying.',
+				],
+				[
+					'action',
+					'He adjusts his bowtie nervously',
+				],
+				[
+					'spoken',
+					'I bet you didn't know I was wearing a <b>bowtie</b> before, did you?',
+				],
+				### The above would result in the following:
+				### <p><span class="convo name">Robert</span><span class="convo spoken">This is what I, Robert, am saying.</span><span class="convo action">He adjusts his bowtie nervously</span><span class="convo spoken">I bet you didn't know I was wearing a <b>bowtie</b> before, did you?</span></p>
+			],
+		},
+	]
+
+RAW block:
+	[
+		{
+			type => 'raw',
+			html => '<div>This will be interpreted as raw html. It will not be placed into a &lt;p&gt; block<div>',
+		}
+	]
+
+Enter and exit blocks block:
+	[
+		{
+			type  => 'enter',
+			start => '<div class="taco">',
+			end   => '</div>',
+		},
+		'This text will end up in the above block',
+		{
+			type => 'exit',
+		},
+	]
+
+If/Then Block:
+	[
+		{
+			type => 'if',
+			### Conditions have the following format:
+			### [variable name][operator][value](['&&' or '||' operator][variable name][operator][value]...)
+			### Operators can be surrounded by any amount of whitespace (including none)
+			cond => [
+				[
+					'var<1', ### The condition
+					'<b>Robert:</b> This is me responding on the condition that a specific variable is equal to one', ### The result
+				],
+				[
+					### This condition was only checked if the first was not met
+					'var>4',
+					[ ### Here, the result is more than one part
+						'<b>Robert:</b> Oh wow!'
+						'<b>Robert:</b> This is me responding under a different circumstance',
+					],
+				],
+				[
+					'var=1&&var2=1',
+					'<b>Robert</b> This is me responding under a special circumstance!',
+				],
+				[
+					null, ### Effectively "else"
+					'<b>Robert:</b> This is my default reaction if none of the conditions are met',
+				],
+			],
+		},
+	]
+
+"Assess" block:
+	### An "assess" block is like an if/then block, except that it will be assessed on each page load until it has been assessed as true
+	[
+		{
+			type => 'assess',
+			cond => [
+				'var>4',
+				[
+					'<b>Robert:</b> This piece of text was not in the conversation previously, but it is now!'
+				],
+			]
+		}
+	]
+
+Updating variables:
+	[
+		'<b>Robert:</b> We're about to update some variables',
+		{
+			type   => 'variable',
+			'var1' => 1, ### set the variable to equal 1
+			'var2' => '+1', ### set the variable to one more than it was previously
+		},
+	]
+
+Choices for the user:
+	[
+		'<b>Robert:</b> And that's my nefarious plan. You should decide how to respond',
+		{
+			type    => 'choice',
+			choices => [
+				[
+					null, ### The first item is the condition. Null conditions are always present
+					'This might be my only option for what to say', ### The second is the text for the item. It will be interpreted as HTML
+					[ ### The third item is the result if this is the choice that the user makes
+						### Note that the option that was selected will disappear, so you will probably want to represent it here
+						'<b>You:<\b> This might be my only option for what to say',
+						'<b>Robert:</b> That's exactly how I thought you'd respond!',
+					],
+				],
+				[
+					'var=2'
+					'This option will appear conditionally',
+					[
+						'<b>You</b> This option will appear conditionally',
+						'<b>Robert:</b> Woah, I totally did not expect you to say that!',
+					],
+				],
+			],
+		},
+	]
+
+
+Modifying Display:
+	[
+		{
+			type => 'display',
+			### the keys here are CSS selectors
+			'.convo' => {
+				'__outside_after' => ' ', ### Content to go into a span outside and after this span
+			}
+			'.convo.name' => {
+				'font-color'     => 'black',
+				'font-weight'    => 'bold',
+				'__inside_after' => ':', ### content to go into a span inside this span, but at the end of it
+			},
+			'.convo.action' => {
+				'font-color'      => 'Iron Gray',
+				'font-style'      => 'italic',
+				'__inside_before' => '(',
+				'__inside after'  => ')',
+			},
+		}
+		##### TODO: If possible, I want these to replace current styles, but be backwards referencable, so that clicking on previous conversation items will load the styles from that time
+	]
+
+Multiple items at once:
+	[
+		{
+			type    => 'multi',
+			content => [
+				### You can put any item type here and they were be interpreted appropriately
+			],
+		}
+	]
+
+Calling a javascript function:
+	[
+		{
+			type     => 'do',
+			function => 'function_name', ### the name of the function
+		}
+	]
+
+Requesting more data:
+	[
+		{
+			type     => 'data',
+			endpoint => 'path/to/endpoint'
+			args     => {
+				key => 'value',
+			}
+		}
+		### It is assumed that the data returned will be more conversation JSON, which will then be interpreted
+		##### TODO: Flesh this out
+	]
+
+Other details:
+	* Every hash will have a "type" and "id" field. They will be stored in the DB as json blobs
+	* In any instance where we could put a hash, we can instead just put an ID number
+	* As the user moves through the conversation, the relevant IDs are stored in their local data.
+	* What choices they make and what if/then branches are taken are also stored in the local data.
+		* This means that we can reconstruct the page as they were originlly seen it from the user's local data.
+		* When reconstructing the page, "variable" blocks are ignored, (as we will have already updated the variables appropriately)
+
+
+

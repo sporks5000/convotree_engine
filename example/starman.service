@@ -1,0 +1,17 @@
+[Unit]
+Description=Starman
+
+[Service]
+Environment=PERL5LIB=$PERL5LIB:/home/username/perl5/lib/perl5
+
+Type=simple
+User=username
+Group=username
+ExecStart=/home/username/perl5/bin/starman --workers 3 --port 25581 /home/username/convotree_engine/temp.pl --error-log /home/username/logs/starman.log
+Restart=always
+WorkingDirectory=/home/username/convotree_engine/
+Nice=19
+LimitNOFILE=16384
+
+[Install]
+WantedBy=multi-user.target
