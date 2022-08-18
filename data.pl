@@ -1,7 +1,7 @@
 #!/usr/bin/env /home/username/perl5/bin/plackup
 
 BEGIN {
-	push @INC, "$ENV{HOME}/perl5/lib/perl5";
+	push @INC, "$ENV{HOME}/perl5/lib/perl5", "$ENV{HOME}/convotree_engine/modules";
 };
 
 use strict;
@@ -17,13 +17,13 @@ my $app = sub {
 	my $body = eval {
 		JSON::decode_json($request->raw_body || '{}');
 	} || {};
-	my $html;
+	my $html = $request->request_uri . ": ";
 	if ($body->{pid}) {
-		$html = $$;
+		$html .= $$;
 	}
 	else {
 		my $name = $body->{name} || $request->raw_body;
-		$html = "Hello $name\n";
+		$html .= "Hello $name\n";
 	}
 
 	return [

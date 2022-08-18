@@ -6,7 +6,7 @@ username => user_name
 domain => domain.com
 
 su - user_name
-	sed -i 's/username/user_name/g' ~/convotree_engine/temp.pl
+	sed -i 's/username/user_name/g' ~/convotree_engine/data.pl
 	perl -MCPAN -Mlocal::lib -e 'CPAN::install(App::cpanminus)' # This will take a long time
 	perl5/bin/cpanm HTTP::Server::Simple::PSGI
 	perl5/bin/cpanm JSON
@@ -16,8 +16,8 @@ cp -a /home/user_name/convotree_engine/example/starman.service /etc/systemd/syst
 sed -i 's/username/user_name/g' /etc/systemd/system/starman.service
 systemctl daemon-reload
 systemctl enable --now starman; systemctl status starman
-curl http://0.0.0.0:25581 --data '{"name":"Carl"}' -H 'Content-Type: application/json'
 
 sed -E -i 's@^\s*#\s*Include\s+"/etc/apache2/conf\.d/userdata/ssl/2_4/user_name/domain.com/\*\.conf"\s*$@Include "/etc/apache2/conf.d/userdata/ssl/2_4/user_name/domain.com/*.conf"@' /etc/apache2/conf/httpd.conf
 mkdir -p /etc/apache2/conf.d/userdata/ssl/2_4/user_name/domain.com
 cp -a /home/user_name/convotree_engine/example/additional.conf /etc/apache2/conf.d/userdata/ssl/2_4/user_name/domain.com/additional.conf
+systemctl restart httpd
