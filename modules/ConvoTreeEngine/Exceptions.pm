@@ -9,21 +9,21 @@ BEGIN {
 		'ConvoTreeEngine::Exception' => {
 			### Not designed to be used directly
 			description => 'Base class from which other exception classes will inherit',
+			fields      => [qw/code/],
 		},
 		'ConvoTreeEngine::Exception::Configuration' => {
 			isa         => 'ConvoTreeEngine::Exception',
 			description => 'A configuration is incorrect or undefined',
-			fields      => [qw/setting value code/],
+			fields      => [qw/setting value/],
 		},
 		'ConvoTreeEngine::Exception::Unexpected' => {
 			isa         => 'ConvoTreeEngine::Exception',
 			description => 'An otherwise unanticipated error',
-			fields      => [qw/code/],
 		},
 		'ConvoTreeEngine::Exception::Connectivity' => {
 			isa         => 'ConvoTreeEngine::Exception',
 			description => 'A connection issue has occurred',
-			fields      => [qw/service code/],
+			fields      => [qw/service/],
 		},
 	);
 }

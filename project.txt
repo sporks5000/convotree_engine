@@ -136,7 +136,7 @@ Choices for the user:
 			type    => 'choice',
 			choices => [
 				[
-					undef, ### The first item is the condition. Null conditions are always present
+					undef, ### The first item is the condition. Null conditions are always shown to the user
 					'This might be my only option for what to say', ### The second is the text for the item. It will be interpreted as HTML
 					[ ### The third item is the result if this is the choice that the user makes
 						### Note that the option that was selected will disappear, so you will probably want to represent it here
@@ -211,21 +211,3 @@ Other details:
 
 
 
-table1: c_element_types
-	type: VARCHAR(15)
-	json_template: JSON
-
-table2: element
-	id: INT
-	type: VARCHAR(15)
-	json: JSON
-
-table3: element_series
-	id: INT
-	name: TEXT
-
-table4: series_to_element
-	series_id: INT
-	element_id: INT
-	nested_series_id: INT
-	sequence: INT
