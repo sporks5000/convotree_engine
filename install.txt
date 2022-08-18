@@ -11,6 +11,9 @@ su - user_name
 	perl5/bin/cpanm HTTP::Server::Simple::PSGI
 	perl5/bin/cpanm JSON
 	perl5/bin/cpanm Starman
+	perl5/bin/cpanm DBI
+	perl5/bin/cpanm DBD::mysql
+	perl5/bin/cpanm Exception::Class
 	exit
 cp -a /home/user_name/convotree_engine/example/starman.service /etc/systemd/system/starman.service
 sed -i 's/username/user_name/g' /etc/systemd/system/starman.service

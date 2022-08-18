@@ -35,10 +35,19 @@ ENHANED conversation items:
 				],
 				[
 					'spoken',
-					'I bet you didn't know I was wearing a <b>bowtie</b> before, did you?',
+					'I bet you didn't know I was wearing a <b>bowtie</b> before, did you, ',
+				],
+				[
+					undef, ### Null here indicates that it won't be placed in a span
+					undef,
+					'name', ### If there is no second element, and a third element is present, it will be interpreted as a variable name, and will be substituted with the variable's value
+				],
+				[
+					'spoken',
+					'?',
 				],
 				### The above would result in the following:
-				### <p><span class="convo name">Robert</span><span class="convo spoken">This is what I, Robert, am saying.</span><span class="convo action">He adjusts his bowtie nervously</span><span class="convo spoken">I bet you didn't know I was wearing a <b>bowtie</b> before, did you?</span></p>
+				### <p><span class="convo name">Robert</span><span class="convo spoken">This is what I, Robert, am saying.</span><span class="convo action">He adjusts his bowtie nervously</span><span class="convo spoken">I bet you didn't know I was wearing a <b>bowtie</b> before, did you, </span>Rupert<span class="convo spoken">?</span></p>
 			],
 		},
 	]
@@ -89,7 +98,7 @@ If/Then Block:
 					'<b>Robert</b> This is me responding under a special circumstance!',
 				],
 				[
-					null, ### Effectively "else"
+					undef, ### Effectively "else"
 					'<b>Robert:</b> This is my default reaction if none of the conditions are met',
 				],
 			],
@@ -127,7 +136,7 @@ Choices for the user:
 			type    => 'choice',
 			choices => [
 				[
-					null, ### The first item is the condition. Null conditions are always present
+					undef, ### The first item is the condition. Null conditions are always present
 					'This might be my only option for what to say', ### The second is the text for the item. It will be interpreted as HTML
 					[ ### The third item is the result if this is the choice that the user makes
 						### Note that the option that was selected will disappear, so you will probably want to represent it here
@@ -171,16 +180,6 @@ Modifying Display:
 		##### TODO: If possible, I want these to replace current styles, but be backwards referencable, so that clicking on previous conversation items will load the styles from that time
 	]
 
-Multiple items at once:
-	[
-		{
-			type    => 'multi',
-			content => [
-				### You can put any item type here and they were be interpreted appropriately
-			],
-		}
-	]
-
 Calling a javascript function:
 	[
 		{
@@ -212,3 +211,21 @@ Other details:
 
 
 
+table1: c_element_types
+	type: VARCHAR(15)
+	json_template: JSON
+
+table2: element
+	id: INT
+	type: VARCHAR(15)
+	json: JSON
+
+table3: element_series
+	id: INT
+	name: TEXT
+
+table4: series_to_element
+	series_id: INT
+	element_id: INT
+	nested_series_id: INT
+	sequence: INT
