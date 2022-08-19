@@ -43,6 +43,11 @@ BEGIN {
 			description => 'An issue with mysql syntax',
 			fields      => [qw/sql args/],
 		},
+		'ConvoTreeEngine::Exception::Input' => {
+			isa         => 'ConvoTreeEngine::Exception',
+			description => 'An issue with input arguments',
+			fields      => [qw/args/],
+		},
 	);
 }
 
@@ -206,6 +211,26 @@ use Exception::Class(%meta);
 			if ($args) {
 				$error .= ". Arguments: $args";
 			}
+		}
+
+		return $error;
+	}
+}
+
+{
+	package ConvoTreeEngine::Exception::Input;
+
+	sub output {
+		my $self = shift;
+
+		my $error = $self->error || 'Input arguments are incorrect';
+		my $args = $self->args;
+		if ($args && ref $args) {
+			require JSON;
+			$args = eval {JSON::encode_json($args)} || '';
+		}
+		if ($args) {
+			$error .= ". Arguments: $args";
 		}
 
 		return $error;

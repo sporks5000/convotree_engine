@@ -11,12 +11,12 @@ use Plack::Request;
 use JSON;
 
 use ConvoTreeEngine::Exceptions;
-use ConvoTreeEngine::Mysql::Connect;
+use ConvoTreeEngine::Mysql;
 use ConvoTreeEngine::Object::Element; ##### TODO: Temporary
 
 my $connection_exception;
 eval {
-	ConvoTreeEngine::Mysql::Connect->getConnection;
+	ConvoTreeEngine::Mysql->getConnection;
 };
 if ($connection_exception = $@) {
 	ConvoTreeEngine::Exception::Unexpected->promote($connection_exception);
@@ -57,7 +57,7 @@ my $app = sub {
 			type => 'raw',
 			json => {html => '<div>Taco</div>'},
 		});
-		my $element2 = ConvoTreeEngine::Object::Element->find({id => $element->{id}});
+		my $element2 = ConvoTreeEngine::Object::Element->find({id => $element->id});
 
 		$response = JSON::encode_json([
 			$element->asHashRef,

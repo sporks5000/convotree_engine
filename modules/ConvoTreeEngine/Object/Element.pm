@@ -7,6 +7,51 @@ use warnings;
 
 use JSON;
 
+sub _table {
+	return 'element';
+}
+
+#=====================#
+#== Field Accessors ==#
+#=====================#
+
+sub id {
+	return shift->{id};
+}
+
+sub type {
+	return shift->{type};
+}
+
+sub json {
+	return shift->{json};
+}
+
+#==========#
+#== CRUD ==#
+#==========#
+
+sub create {
+	my $invocant = shift;
+	my $args     = $invocant->_prep_args(@_);
+
+	if (ref $args->{json}) {
+		$args->{json} = JSON::encode_json($args->{json});
+	}
+
+	my $table = $invocant->_table;
+	my $id = ConvoTreeEngine::Mysql->insertForId(
+		qq/INSERT INTO $table (type, json) VALUES(?, ?);/,
+		[$args->{type}, $args->{json}],
+	);
+
+	return $invocant->promote({
+		id   => $id,
+		type => $args->{type},
+		json => $args->{json},
+	});
+}
+
 sub search {
 	my $invocant = shift;
 	my ($args, $attrs) = $invocant->_prep_args_multi(2, @_);
@@ -43,12 +88,13 @@ sub search {
 	$whereString ||= join ' AND ', @whereString;
 	$whereString = "WHERE $whereString" if $whereString;
 	push @input, @$bits;
+	my $table = $invocant->_table;
 	my $query = qq/
-		SELECT id, type, json FROM element
+		SELECT id, type, json FROM $table
 		$whereString
 		$attrString
 	/;
-	my $rows = ConvoTreeEngine::Mysql::Connect->fetchRows($query, \@input);
+	my $rows = ConvoTreeEngine::Mysql->fetchRows($query, \@input);
 
 	foreach my $row (@$rows) {
 		$invocant->promote($row);
@@ -57,35 +103,54 @@ sub search {
 	return @$rows;
 }
 
-sub create {
-	my $invocant = shift;
-	my $args     = $invocant->_prep_args(@_);
+sub update {
+	my $self = shift;
+	my $args = $self->_prep_args(@_);
+
+	ConvoTreeEngine::Exception::Input->throw(
+		error => "Only the 'json' field can be updated on the 'Element' object",
+		args  => $args,
+	) if !$args->{json} || scalar(keys %$args) > 1;
 
 	if (ref $args->{json}) {
 		$args->{json} = JSON::encode_json($args->{json});
 	}
 
-	my $dbHandler = ConvoTreeEngine::Mysql::Connect->getConnection;
-	my $queryHandler = $dbHandler->prepare(qq/
-		INSERT INTO element (type, json) VALUES(?, ?);
-	/);
-	$queryHandler->execute($args->{type}, $args->{json});
-	$queryHandler->finish();
-	my $id = $queryHandler->{mysql_insertid};
+	my $table = $self->_table;
+	ConvoTreeEngine::Mysql->doQuery(
+		qq/UPDATE $table SET json = ? WHERE id = ?;/,
+		[$args->{json}, $self->id],
+	);
 
-	return $invocant->promote({
-		id   => $id,
-		type => $args->{type},
-		json => $args->{json},
-	});
+	return $self->refresh;
+}
+
+sub delete {
+	my $self = shift;
+
+	my $table = $self->_table;
+	ConvoTreeEngine::Mysql->doQuery(
+		qq/DELETE FROM $table WHERE id = ?;/,
+		[$self->id],
+	);
+
+	return;
+}
+
+#===========================#
+#== Returning Information ==#
+#===========================#
+
+sub jsonRef {
+	return JSON::decode_json(shift->json);
 }
 
 sub asHashRef {
 	my $self = shift;
 
-	my $hash = JSON::decode_json($self->{json});
-	$hash->{type} = $self->{type};
-	$hash->{id}   = $self->{id};
+	my $hash = $self->jsonRef;
+	$hash->{type} = $self->type;
+	$hash->{id}   = $self->id;
 
 	return $hash;
 }

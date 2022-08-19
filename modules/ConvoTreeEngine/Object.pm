@@ -3,7 +3,7 @@ package ConvoTreeEngine::Object;
 use strict;
 use warnings;
 
-use ConvoTreeEngine::Mysql::Connect;
+use ConvoTreeEngine::Mysql;
 
 sub _prep_args {
 	my $self = shift;
