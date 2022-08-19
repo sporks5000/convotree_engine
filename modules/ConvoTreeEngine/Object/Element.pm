@@ -137,6 +137,63 @@ sub delete {
 	return;
 }
 
+#================#
+#== Validation ==#
+#================#
+
+{
+	my $boolean = sub {
+		my $value = shift;
+		return 1 if !defined $value;
+		return 1 if $value =~ /^[01]\z/;
+		return 1 if ref($value) && $value->isa('JSON::Boolean');
+		return 0;
+	};
+	my $wordsMax50 = sub {
+		my $value = shift;
+		return 1 if !defined $value;
+		return 0 if $value !~ m/^(?:\w+[ -]?)+\b\z/;
+		return 0 if $value !~ m/^.{1,50}\z/;
+		return 1;
+	};
+
+	my %typeValidation = (
+		item     => {
+			text => [1, ref => 'ARRAY'],
+		},
+		raw      => {
+			html => [1, ref => undef],
+		},
+		enter    => {
+			start => [1, ref => undef],
+			end   => [1, ref => undef],
+			name  => [1, sub => $wordsMax50],
+		},
+		exit     => {
+			name => [1, sub => $wordsMax50],
+			all  => [0, sub => $boolean],
+		},
+		if       => {},
+		assess   => {},
+		varaible => {},
+		choice   => {},
+		display  => {},
+		do       => {},
+		data     => {},
+	);
+
+	sub _validate_json {
+		my $invocant = shift;
+		my $json     = shift;
+
+		unless (ref $json) {
+			$json = JSON::decode_json($json);
+		}
+
+		##### TODO: Finish this
+	}
+}
+
 #===========================#
 #== Returning Information ==#
 #===========================#

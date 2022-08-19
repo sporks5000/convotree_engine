@@ -134,10 +134,11 @@ sub findAndDie {
 }
 
 sub refresh {
-	my $self = $_[0];
-	$_[0] = $self->find({id => $self->id});
+	my $self = shift;
+	my $found = $self->find({id => $self->id});
+	%$self = %$found;
 
-	return $_[0];
+	return $self;
 }
 
 sub all {

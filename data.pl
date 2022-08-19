@@ -53,15 +53,13 @@ my $app = sub {
 
 ##### TODO: Temporary
 
-		my $element = ConvoTreeEngine::Object::Element->create({
-			type => 'raw',
-			json => {html => '<div>Taco</div>'},
+		my $element = ConvoTreeEngine::Object::Element->find({id => 6});
+		$element->update({
+			json => {html => '<div>Raw Fishes</div>'}
 		});
-		my $element2 = ConvoTreeEngine::Object::Element->find({id => $element->id});
 
 		$response = JSON::encode_json([
 			$element->asHashRef,
-			$element2->asHashRef,
 		]);
 
 ##### TODO: End temporary

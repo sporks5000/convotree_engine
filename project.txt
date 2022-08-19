@@ -65,11 +65,14 @@ Enter and exit blocks block:
 		{
 			type  => 'enter',
 			start => '<div class="taco">',
+			name  => 'A name',
 			end   => '</div>',
 		},
 		'This text will end up in the above block',
 		{
 			type => 'exit',
+			name => 'A name', ### Only xit if the name matches. undef indicates to exit regardless of the name
+			all  => 1, ### Boolean. If true, exit ALL blocks
 		},
 	]
 
