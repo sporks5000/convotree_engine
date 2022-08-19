@@ -27,7 +27,7 @@ sub getConnection {
 		eval {
 			$dbHandler = DBI->connect("DBI:mysql:database=" . $dbName . ";" . $dbHost, $dbUser, $dbPass, {'RaiseError' => 1});
 			my $queryHandler = $dbHandler->prepare(qq/
-				SELECT table_name AS tables 
+				SELECT table_name AS tables
 				FROM information_schema.tables 
 				WHERE table_schema = '$dbName'
 			/);
@@ -44,6 +44,7 @@ sub getConnection {
 			ConvoTreeEngine::Exception::Connectivity->throw(
 				error   => $ex,
 				service => 'mysql',
+				code    => 502,
 			);
 		}
 	}
@@ -57,6 +58,36 @@ sub closeConnection {
 		$dbHandler->disconnect();
 		undef $dbHandler;
 	}
+}
+
+sub fetchRows {
+	my $class = shift;
+	my $query = shift;
+	my $bits  = shift;
+
+	my $dbHandler = $class->getConnection;
+	my $rows;
+	eval {
+		my $queryHandler = $dbHandler->prepare($query);
+		$queryHandler->execute(@$bits);
+		$rows = $queryHandler->fetchall_arrayref({});
+		$queryHandler->finish();
+	};
+	if (my $ex = $@) {
+		if ($ex =~ m/You have an error in your SQL syntax/) {
+			ConvoTreeEngine::Exception::SQL->throw(
+				error => "$ex",
+				sql   => $query,
+				args  => $bits,
+			);
+		}
+		else {
+			ConvoTreeEngine::Exception::Unexpected->promote($ex);
+			$ex->rethrow;
+		}
+	}
+
+	return $rows;
 }
 
 sub createTables {
@@ -181,8 +212,9 @@ sub atomic {
 	my $dbHandler = $class->getConnection;
 	$dbHandler->{AutoCommit} = 0;
 	if ($dbHandler->{AutoCommit}) {
-		ConvoTreeEngine::Exception::Unexpected->throw(
+		ConvoTreeEngine::Exception::Internal->throw(
 			error => 'Unable to create a transaction lock',
+			code  => 502,
 		);
 	}
 
@@ -205,8 +237,9 @@ sub atomic {
 	$dbHandler->{AutoCommit} = 1; ### Setting to one automatically commits
 	unless ($dbHandler->{AutoCommit}) {
 		$dbHandler->rollback;
-		ConvoTreeEngine::Exception::Unexpected->throw(
+		ConvoTreeEngine::Exception::Internal->throw(
 			error => 'Unable to commit a transaction lock',
+			code  => 502,
 		);
 	}
 

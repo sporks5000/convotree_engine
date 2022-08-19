@@ -20,10 +20,28 @@ BEGIN {
 			isa         => 'ConvoTreeEngine::Exception',
 			description => 'An otherwise unanticipated error',
 		},
+		'ConvoTreeEngine::Exception::Internal' => {
+			isa         => 'ConvoTreeEngine::Exception',
+			description => 'An internal, but otherwise unclassified error',
+		},
 		'ConvoTreeEngine::Exception::Connectivity' => {
 			isa         => 'ConvoTreeEngine::Exception',
 			description => 'A connection issue has occurred',
 			fields      => [qw/service/],
+		},
+		'ConvoTreeEngine::Exception::RecordNotFound' => {
+			isa         => 'ConvoTreeEngine::Exception',
+			description => 'An attempt to find a record has failed',
+			fields      => [qw/args/],
+		},
+		'ConvoTreeEngine::Exception::DuplicateRecord' => {
+			isa         => 'ConvoTreeEngine::Exception::RecordNotFound',
+			description => 'An attempt to find a single record has returned more than one record, or a matching record already exists',
+		},
+		'ConvoTreeEngine::Exception::SQL' => {
+			isa         => 'ConvoTreeEngine::Exception',
+			description => 'An issue with mysql syntax',
+			fields      => [qw/sql args/],
 		},
 	);
 }
@@ -96,6 +114,21 @@ use Exception::Class(%meta);
 }
 
 {
+	package ConvoTreeEngine::Exception::Internal;
+
+	sub output {
+		my $self = shift;
+
+		my $error = 'An error has occurred';
+		if (my $text = $self->error) {
+			$error .= ": $text";
+		}
+
+		return $error;
+	}
+}
+
+{
 	package ConvoTreeEngine::Exception::Connectivity;
 
 	sub output {
@@ -109,6 +142,70 @@ use Exception::Class(%meta);
 
 		if (my $text = $self->error) {
 			$error .= ": $text";
+		}
+
+		return $error;
+	}
+}
+
+{
+	package ConvoTreeEngine::Exception::RecordNotFound;
+
+	sub output {
+		my $self = shift;
+
+		my $error = $self->error || 'Record not found';
+		my $args  = $self->args;
+		if ($args && ref $args) {
+			require JSON;
+			$args = eval {JSON::encode_json($args)} || '';
+		}
+		if ($args) {
+			$error .= ". Arguments: $args";
+		}
+
+		return $error;
+	}
+}
+
+{
+	package ConvoTreeEngine::Exception::DuplicateRecord;
+
+	sub output {
+		my $self = shift;
+
+		my $error = $self->error || 'A duplicate record exists';
+		my $args  = $self->args;
+		if ($args && ref $args) {
+			require JSON;
+			$args = eval {JSON::encode_json($args)} || '';
+		}
+		if ($args) {
+			$error .= ". Arguments: $args";
+		}
+
+		return $error;
+	}
+}
+
+{
+	package ConvoTreeEngine::Exception::SQL;
+
+	sub output {
+		my $self = shift;
+
+		my $error = $self->error || 'There is an issue with SQL syntax';
+		my $sql   = $self->sql;
+		if ($sql) {
+			$error .= " SQL: $sql";
+			my $args = $self->args;
+			if ($args && ref $args) {
+				require JSON;
+				$args = eval {JSON::encode_json($args)} || '';
+			}
+			if ($args) {
+				$error .= ". Arguments: $args";
+			}
 		}
 
 		return $error;

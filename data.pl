@@ -12,6 +12,7 @@ use JSON;
 
 use ConvoTreeEngine::Exceptions;
 use ConvoTreeEngine::Mysql::Connect;
+use ConvoTreeEngine::Object::Element; ##### TODO: Temporary
 
 my $connection_exception;
 eval {
@@ -49,6 +50,22 @@ my $app = sub {
 			my $name = $body->{name} || $request->raw_body;
 			$response .= "Hello $name\n";
 		}
+
+##### TODO: Temporary
+
+		my $element = ConvoTreeEngine::Object::Element->create({
+			type => 'raw',
+			json => {html => '<div>Taco</div>'},
+		});
+		my $element2 = ConvoTreeEngine::Object::Element->find({id => $element->{id}});
+
+		$response = JSON::encode_json([
+			$element->asHashRef,
+			$element2->asHashRef,
+		]);
+
+##### TODO: End temporary
+
 	};
 	if (my $ex = $@) {
 		ConvoTreeEngine::Exception::Unexpected->promote($ex);
