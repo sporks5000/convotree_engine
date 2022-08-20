@@ -53,10 +53,28 @@ my $app = sub {
 
 ##### TODO: Temporary
 
-		my $element = ConvoTreeEngine::Object::Element->find({id => 6});
-		$element->update({
-			json => {html => '<div>Raw Fishes</div>'}
-		});
+		my $element = ConvoTreeEngine::Object::Element->find({id => 1});
+		if ($element) {
+			if ($element->name eq 'FISHES') {
+				$element->update({
+					json => {html => '<div>Raw Hotdogs</div>'},
+					name => 'HOTDOGS',
+				});
+			}
+			else {
+				$element->update({
+					json => {html => '<div>Raw Fishes</div>'},
+					name => 'FISHES',
+				});
+			}
+		}
+		else {
+			$element = ConvoTreeEngine::Object::Element->create({
+				type => 'raw',
+				name => 'CARL',
+				json => {html => '<div>A delicious taco</div>'},
+			});
+		}
 
 		$response = JSON::encode_json([
 			$element->asHashRef,

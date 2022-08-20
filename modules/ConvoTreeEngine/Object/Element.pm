@@ -23,6 +23,14 @@ sub type {
 	return shift->{type};
 }
 
+sub name {
+	return shift->{name};
+}
+
+sub category {
+	return shift->{category};
+}
+
 sub json {
 	return shift->{json};
 }
@@ -35,20 +43,22 @@ sub create {
 	my $invocant = shift;
 	my $args     = $invocant->_prep_args(@_);
 
-	if (ref $args->{json}) {
-		$args->{json} = JSON::encode_json($args->{json});
-	}
+	$args->{json} = $invocant->_validate_json($args->{json}, $args->{type});
+	$args->{name} //= undef;
+	$args->{category} //= undef;
 
 	my $table = $invocant->_table;
 	my $id = ConvoTreeEngine::Mysql->insertForId(
-		qq/INSERT INTO $table (type, json) VALUES(?, ?);/,
-		[$args->{type}, $args->{json}],
+		qq/INSERT INTO $table (type, name, category, json) VALUES(?, ?, ?, ?);/,
+		[$args->{type}, $args->{name}, $args->{category}, $args->{json}],
 	);
 
 	return $invocant->promote({
-		id   => $id,
-		type => $args->{type},
-		json => $args->{json},
+		id       => $id,
+		type     => $args->{type},
+		name     => $args->{name},
+		category => $args->{category},
+		json     => $args->{json},
 	});
 }
 
@@ -90,7 +100,7 @@ sub search {
 	push @input, @$bits;
 	my $table = $invocant->_table;
 	my $query = qq/
-		SELECT id, type, json FROM $table
+		SELECT id, type, name, category, json FROM $table
 		$whereString
 		$attrString
 	/;
@@ -107,19 +117,25 @@ sub update {
 	my $self = shift;
 	my $args = $self->_prep_args(@_);
 
-	ConvoTreeEngine::Exception::Input->throw(
-		error => "Only the 'json' field can be updated on the 'Element' object",
-		args  => $args,
-	) if !$args->{json} || scalar(keys %$args) > 1;
+	$args->{json} = $self->_validate_json($args->{json}, $self->type) if exists $args->{json};
 
-	if (ref $args->{json}) {
-		$args->{json} = JSON::encode_json($args->{json});
+	my @sets;
+	my @bits;
+	foreach my $arg (keys %$args) {
+		ConvoTreeEngine::Exception::Input->throw(
+			error => "Only the 'json' field can be updated on the 'Element' object",
+			args  => $args,
+		) if $arg ne 'name' && $arg ne 'json' && $arg ne 'category';
+		push @sets, "$arg = ?";
+		push @bits, $args->{$arg};
 	}
+	my $sets = join ', ', @sets;
+	push @bits, $self->id;
 
 	my $table = $self->_table;
 	ConvoTreeEngine::Mysql->doQuery(
-		qq/UPDATE $table SET json = ? WHERE id = ?;/,
-		[$args->{json}, $self->id],
+		qq/UPDATE $table SET $sets WHERE id = ?;/,
+		\@bits,
 	);
 
 	return $self->refresh;
@@ -152,6 +168,24 @@ sub delete {
 		return 1 if ref($value) && $value->isa('JSON::Boolean');
 		return 0;
 	};
+	my $hash = sub {
+		my $value = shift;
+		return 0 unless (ref $value || '' ) eq 'HASH';
+		return 1;
+	};
+	my $array = sub {
+		my $value = shift;
+		return 0 unless (ref $value || '' ) eq 'ARRAY';
+		return 1;
+	};
+	my $variableName = sub {
+		### Returns true if the value matches what we expect from a javascript variable name
+		my $value = shift;
+		return 0 unless defined $value;
+		return 0 if ref $value;
+		return 0 if $value !~ m/^[a-zA-Z0-9_.]+\z/;
+		return 1;
+	};
 	my $words = sub {
 		### Returns true if the value is a string of words separated by either single spaces or single hyphens
 		my $value = shift;
@@ -178,9 +212,9 @@ sub delete {
 	my $itemText = sub {
 		### The value must be an array of arrays
 		my $value = shift;
-		return 0 unless (ref($value) || '') eq 'ARRAY';
+		return 0 unless $array->($value);
 		foreach my $deep (@$value) {
-			return 0 unless (ref($deep) || '') eq 'ARRAY';
+			return 0 unless $array->($deep);
 			foreach my $deeper (@$deep) {
 				return 0 if ref $deeper;
 			}
@@ -192,7 +226,7 @@ sub delete {
 			### Otherwise, there must be no third element
 			return 0 if defined $deep->[1] && @$deep > 2;
 			return 0 if !defined $deep->[1] && !defined $deep->[2];
-			return 0 if defined $deep->[2] && $deep->[2] !~ m/^[a-zA-Z0-9_.]+\z/
+			return 0 if defined $deep->[2] && !$variableName->($deep->[2]);
 			return 0 if @$deep > 3;
 		}
 		return 1;
@@ -203,6 +237,7 @@ sub delete {
 		### ...or the word 'SERIES' followed by a positive integer represending an ConvoTreeEngine::Object::Series object
 		### ...or an arrayref made up of any/all of the above
 		my $value = shift;
+		my $type  = shift;
 		return 0 unless defined $value;
 		my $ref = ref $value || '';
 		if ($ref eq 'ARRAY') {
@@ -211,17 +246,18 @@ sub delete {
 			}
 		}
 		elsif ($ref eq 'HASH') {
-			return 0 unless $value->{type};
-			return 0 unless $typeValidation{$value->{type}};
+			$type ||= $value->{type};
+			return 0 unless $type;
+			return 0 unless $typeValidation{$type};
 			foreach my $key (keys %$value) {
 				next if $key eq 'type';
-				return 0 unless $typeValidation{$value->{type}}{$key};
+				return 0 unless $typeValidation{$type}{$key};
 			}
-			foreach my $key (keys %{$typeValidation{$value->{type}}}) {
-				next unless $typeValidation{$value->{type}}{$key}[0] && exists $value->{$key};
+			foreach my $key (keys %{$typeValidation{$type}}) {
+				next unless $typeValidation{$type}{$key}[0] && exists $value->{$key};
 				return 0 if !exists $value->{$key};
 				### Make sure it passes validation for that element type
-				my $test = $typeValidation{$value->{type}}{$key}[1];
+				my $test = $typeValidation{$type}{$key}[1];
 				return 0 unless $test->($value->{$key});
 			}
 		}
@@ -245,8 +281,7 @@ sub delete {
 				$part =~ m/(=|!=|>|<|>=|<=)/;
 				$1;
 			};
-			### Note that variable names CAN contain periods
-			return 0 if $varName !~ m/^[a-zA-Z0-9_.]+\z/;
+			return 0 unless $variableName->($varName);
 			if ($operator =~ m/[<>]/) {
 				### If the operator is specific to numbers, make sure that the condition is a number
 				return 0 unless $number->($cond);
@@ -258,18 +293,52 @@ sub delete {
 		}
 		return 1;
 	};
+	my $singleCondition = sub {
+		### the value will be an array
+		my $value = shift;
+		return 0 unless $array->($value);
+		### The first element will either be undefined or a condition string
+		return 0 if defined $value->[0] && !$conditionString->($value->[0]);
+		return 0 if @$value > 2;
+		return 1 unless @$value == 2;
+		### If the second element is present, it will match the $elements test
+		return 0 unless $elements->($value->[1]);
+		return 1;
+	};
 	my $ifConditions = sub {
 		### The value must be an array of arrays
 		my $value = shift;
-		return 0 unless (ref($value) || '') eq 'ARRAY';
+		return 0 unless $array->($value);
 		foreach my $deep (@$value) {
-			### The first element will either be undefined or a condition string
-			return 0 unless (ref($deep) || '') eq 'ARRAY';
-			return 0 if defined $deep->[0] && !$conditionString->($deep->[0]);
-			return 0 if @deep > 2;
-			next unless @$deep == 2;
-			### If the second element is present, it will match the $elements test
-			return 0 unless $elements->($deep->[1]);
+			return 0 unless $singleCondition->($deep);
+		}
+		return 1;
+	};
+	my $variableUpdates = sub {
+		### Returns true if given a hash of variable names to strings (or undefineds)
+		my $value = shift;
+		return 0 unless $hash->($value);
+		foreach my $key (keys %$value) {
+			return 0 unless $variableName->($key);
+			return 0 unless !defined $value->{$key} || $string->($value->{$key});
+		}
+		return 1;
+	};
+	my $choices = sub {
+		### The value must be an array of arrays
+		my $value = shift;
+		return 0 unless $array->($value);
+		foreach my $deep (@$value) {
+			return 0 unless defined $deep;
+			return 0 unless $array->($deep);
+			### The first element will be a condition string
+			return 0 unless $conditionString->($deep->[0]);
+			### The second element will be what we display for the choice
+			return 0 unless $string->($deep->[1]);
+			next if @$deep == 2;
+			return 0 if @$deep > 3;
+			### If there is a third element, it will match the $elements test
+			return 0 unless $elements->($deep->[2]);
 		}
 		return 1;
 	};
@@ -301,23 +370,46 @@ sub delete {
 		if       => {
 			cond => [1, $ifConditions],
 		},
-		assess   => {},
-		varaible => {},
-		choice   => {},
-		display  => {},
-		do       => {},
-		data     => {},
+		assess   => {
+			cond => [1, $singleCondition],
+		},
+		varaible => {
+			update => [1, $variableUpdates],
+		},
+		choice   => {
+			choices => [1, $choices],
+		},
+		display  => {
+			disp => [1, $hash],
+		},
+		do       => {
+			function => [1, sub {
+				my $value = shift;
+				return 0 if $value !~ m/^[a-zA-Z0-9_]+\z/;
+				return 1;
+			}],
+			args     => [0, $array],
+		},
+		data     => {
+			get => [1, $elements],
+		},
 	);
 
 	sub _validate_json {
 		my $invocant = shift;
 		my $json     = shift;
+		my $type     = shift;
 
 		unless (ref $json) {
 			$json = JSON::decode_json($json);
 		}
 
-		##### TODO: Finish this
+		my $success = $elements->($json, $type);
+		ConvoTreeEngine::Exception::Input->throw(
+			error => 'Validation for Element JSON did not pass',
+		) unless $success;
+
+		return JSON::encode_json($json);
 	}
 }
 
@@ -333,8 +425,10 @@ sub asHashRef {
 	my $self = shift;
 
 	my $hash = $self->jsonRef;
-	$hash->{type} = $self->type;
-	$hash->{id}   = $self->id;
+	$hash->{type}     = $self->type;
+	$hash->{id}       = $self->id;
+	$hash->{name}     = $self->name;
+	$hash->{category} = $self->category;
 
 	return $hash;
 }

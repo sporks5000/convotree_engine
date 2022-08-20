@@ -119,17 +119,11 @@ sub doQuery {
 		}
 	};
 	if (my $ex = $@) {
-		if ($ex =~ m/You have an error in your SQL syntax/) {
-			ConvoTreeEngine::Exception::SQL->throw(
-				error => "$ex",
-				sql   => $query,
-				args  => $bits,
-			);
-		}
-		else {
-			ConvoTreeEngine::Exception::Unexpected->promote($ex);
-			$ex->rethrow;
-		}
+		ConvoTreeEngine::Exception::SQL->throw(
+			error => "$ex",
+			sql   => $query,
+			args  => $bits,
+		);
 	}
 
 	return
@@ -163,7 +157,11 @@ sub createTables {
 				CREATE TABLE IF NOT EXISTS element (
 					id INT AUTO_INCREMENT PRIMARY KEY,
 					type VARCHAR(15) NOT NULL,
+					name VARCHAR(256),
+					category VARCHAR(50),
 					json JSON NOT NULL,
+					UNIQUE element_name_category_index
+						(name, category),
 					FOREIGN KEY (type)
 						REFERENCES c_element_types(type)
 						ON DELETE RESTRICT
@@ -171,15 +169,30 @@ sub createTables {
 				)
 				ENGINE=InnoDB;
 			/);
+
+			$class->doQuery(qq/
+				CREATE INDEX element_category_index
+					USING BTREE
+					ON element(category);
+			/);
 		}
 
 		unless ($tableHash{element_series}) {
 			$class->doQuery(qq/
 				CREATE TABLE IF NOT EXISTS element_series (
 					id INT AUTO_INCREMENT PRIMARY KEY,
-					name VARCHAR(256) UNIQUE NOT NULL
+					name VARCHAR(256) NOT NULL,
+					category VARCHAR(50) NOT NULL,
+					UNIQUE element_name_category_index
+						(name, category)
 				)
 				ENGINE=InnoDB;
+			/);
+
+			$class->doQuery(qq/
+				CREATE INDEX element_series_category_index
+					USING BTREE
+					ON element_series(category);
 			/);
 		}
 

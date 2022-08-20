@@ -135,8 +135,10 @@ Updating variables:
 		'<b>Robert:</b> We're about to update some variables',
 		{
 			type   => 'variable',
-			'var1' => 1, ### set the variable to equal 1
-			'var2' => '+1', ### set the variable to one more than it was previously
+			update => {
+				'var1' => 1, ### set the variable to equal 1
+				'var2' => '+1', ### set the variable to one more than it was previously
+			};
 		},
 	]
 
@@ -173,19 +175,21 @@ Modifying Display:
 		{
 			type => 'display',
 			### the keys here are CSS selectors
-			'.convo' => {
-				'__outside_after' => ' ', ### Content to go into a span outside and after this span
-			}
-			'.convo.name' => {
-				'font-color'     => 'black',
-				'font-weight'    => 'bold',
-				'__inside_after' => ':', ### content to go into a span inside this span, but at the end of it
-			},
-			'.convo.action' => {
-				'font-color'      => 'Iron Gray',
-				'font-style'      => 'italic',
-				'__inside_before' => '(',
-				'__inside after'  => ')',
+			disp => {
+				'.convo' => {
+					'__outside_after' => ' ', ### Content to go into a span outside and after this span
+				}
+				'.convo.name' => {
+					'font-color'     => 'black',
+					'font-weight'    => 'bold',
+					'__inside_after' => ':', ### content to go into a span inside this span, but at the end of it
+				},
+				'.convo.action' => {
+					'font-color'      => 'Iron Gray',
+					'font-style'      => 'italic',
+					'__inside_before' => '(',
+					'__inside after'  => ')',
+				},
 			},
 		}
 		##### TODO: If possible, I want these to replace current styles, but be backwards referencable, so that clicking on previous conversation items will load the styles from that time
@@ -196,6 +200,10 @@ Calling a javascript function:
 		{
 			type     => 'do',
 			function => 'function_name', ### the name of the function
+			args     => [
+				'arg1',
+				'arg2',
+			],
 		}
 	]
 
