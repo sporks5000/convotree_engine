@@ -142,38 +142,165 @@ sub delete {
 #================#
 
 {
+	my %typeValidation;
+
 	my $boolean = sub {
+		### Returns true if the value is strictly boolean
 		my $value = shift;
 		return 1 if !defined $value;
 		return 1 if $value =~ /^[01]\z/;
 		return 1 if ref($value) && $value->isa('JSON::Boolean');
 		return 0;
 	};
-	my $wordsMax50 = sub {
+	my $words = sub {
+		### Returns true if the value is a string of words separated by either single spaces or single hyphens
+		my $value = shift;
+		return 0 if !defined $value;
+		return 0 if ref $value;
+		return 0 if $value !~ m/^(?:[a-zA-Z0-9_]+[ -]?)+\b\z/;
+		return 1;
+	};
+	my $string = sub {
+		### returns true if the value is a text string
+		my $value = shift;
+		return 0 if ref $value;
+		return 1 if defined $value && length $value;
+		return 0;
+	};
+	my $number = sub {
+		### Returns true if the value looks like a lofical number, either positive or negative, with or without decimal places
+		my $value = shift;
+		return 0 if !defined $value;
+		return 0 if ref $value;
+		return 0 if $value !~ m/^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z/;
+		return 1;
+	},
+	my $itemText = sub {
+		### The value must be an array of arrays
+		my $value = shift;
+		return 0 unless (ref($value) || '') eq 'ARRAY';
+		foreach my $deep (@$value) {
+			return 0 unless (ref($deep) || '') eq 'ARRAY';
+			foreach my $deeper (@$deep) {
+				return 0 if ref $deeper;
+			}
+			### The first element will either be undefined or a string of words
+			return 0 if defined $deep->[0] && $words->($deep->[0]);
+			### The second element must be undefined or a string
+			return 0 if defined $deep->[1] && !$string->($deep->[1]);
+			### If the second element is undefined, the third element must be a single word (representing a variable name)
+			### Otherwise, there must be no third element
+			return 0 if defined $deep->[1] && @$deep > 2;
+			return 0 if !defined $deep->[1] && !defined $deep->[2];
+			return 0 if defined $deep->[2] && $deep->[2] !~ m/^[a-zA-Z0-9_.]+\z/
+			return 0 if @$deep > 3;
+		}
+		return 1;
+	};
+	my $elements; $elements = sub {
+		### Either a hashref matching what's expected from an ConvoTreeEngine::Object::Element object (not including the ID)
+		### ...or positive integer representing the ID of an ConvoTreeEngine::Object::Element object
+		### ...or the word 'SERIES' followed by a positive integer represending an ConvoTreeEngine::Object::Series object
+		### ...or an arrayref made up of any/all of the above
+		my $value = shift;
+		return 0 unless defined $value;
+		my $ref = ref $value || '';
+		if ($ref eq 'ARRAY') {
+			foreach my $element (@$value) {
+				return 0 unless $elements->($element);
+			}
+		}
+		elsif ($ref eq 'HASH') {
+			return 0 unless $value->{type};
+			return 0 unless $typeValidation{$value->{type}};
+			foreach my $key (keys %$value) {
+				next if $key eq 'type';
+				return 0 unless $typeValidation{$value->{type}}{$key};
+			}
+			foreach my $key (keys %{$typeValidation{$value->{type}}}) {
+				next unless $typeValidation{$value->{type}}{$key}[0] && exists $value->{$key};
+				return 0 if !exists $value->{$key};
+				### Make sure it passes validation for that element type
+				my $test = $typeValidation{$value->{type}}{$key}[1];
+				return 0 unless $test->($value->{$key});
+			}
+		}
+		else {
+			return 0 if $value =~ m/^(SERIES)?[0-9]+\z/;
+		}
+		return 1;
+	};
+	my $conditionString = sub {
+		### A string of text, potentially of multiple parts separated with and/or operators ('&' or '\')
 		my $value = shift;
 		return 1 if !defined $value;
-		return 0 if $value !~ m/^(?:\w+[ -]?)+\b\z/;
-		return 0 if $value !~ m/^.{1,50}\z/;
+		return 0 if ref $value;
+		return 0 if !length $value;
+		my @parts = split m/\s*(&|\|)\s*/, $value;
+		foreach my $part (@parts) {
+			### Each part contains a variable name, an operator, and a condition
+			my ($varName, $cond, @other) = split m/\s*(=|!=|>|<|>=|<=)\s*/, $part;
+			return 0 if @other;
+			my $operator = do {
+				$part =~ m/(=|!=|>|<|>=|<=)/;
+				$1;
+			};
+			### Note that variable names CAN contain periods
+			return 0 if $varName !~ m/^[a-zA-Z0-9_.]+\z/;
+			if ($operator =~ m/[<>]/) {
+				### If the operator is specific to numbers, make sure that the condition is a number
+				return 0 unless $number->($cond);
+			}
+			else {
+				### Otherwise the condition can be a single word
+				return 0 if $cond !~ m/^[a-zA-Z0-9_]+\z/;
+			}
+		}
+		return 1;
+	};
+	my $ifConditions = sub {
+		### The value must be an array of arrays
+		my $value = shift;
+		return 0 unless (ref($value) || '') eq 'ARRAY';
+		foreach my $deep (@$value) {
+			### The first element will either be undefined or a condition string
+			return 0 unless (ref($deep) || '') eq 'ARRAY';
+			return 0 if defined $deep->[0] && !$conditionString->($deep->[0]);
+			return 0 if @deep > 2;
+			next unless @$deep == 2;
+			### If the second element is present, it will match the $elements test
+			return 0 unless $elements->($deep->[1]);
+		}
 		return 1;
 	};
 
-	my %typeValidation = (
+	%typeValidation = (
 		item     => {
-			text => [1, ref => 'ARRAY'],
+			text => [1, $itemText],
+		},
+		note     => {
+			note => [1, $string],
 		},
 		raw      => {
-			html => [1, ref => undef],
+			html => [1, $string],
 		},
 		enter    => {
-			start => [1, ref => undef],
-			end   => [1, ref => undef],
-			name  => [1, sub => $wordsMax50],
+			start => [1, $string],
+			end   => [1, $string],
+			name  => [1, $words],
 		},
 		exit     => {
-			name => [1, sub => $wordsMax50],
-			all  => [0, sub => $boolean],
+			name => [1, sub {
+				my $value = shift;
+				return 1 if !defined $value;
+				return 1 if $words->($value);
+				return 0;
+			}],
+			all  => [0, $boolean],
 		},
-		if       => {},
+		if       => {
+			cond => [1, $ifConditions],
+		},
 		assess   => {},
 		varaible => {},
 		choice   => {},

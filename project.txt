@@ -52,6 +52,14 @@ ENHANED conversation items:
 		},
 	]
 
+note block:
+	[
+		{
+			type => 'note',
+			note => 'Text that will not be displayed to the user',
+		}
+	]
+
 RAW block:
 	[
 		{

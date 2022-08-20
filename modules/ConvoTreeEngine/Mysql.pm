@@ -152,9 +152,9 @@ sub createTables {
 
 			$class->doQuery(qq/
 				INSERT IGNORE INTO c_element_types (type) VALUES
-					('item'),('raw'),('enter'),('exit'),
-					('if'),('assess'),('varaible'),('choice'),
-					('display'),('do'),('data');
+					('item'),('note'),('raw'),('enter'),
+					('exit'),('if'),('assess'),('varaible'),
+					('choice'),('display'),('do'),('data');
 			/);
 		}
 
