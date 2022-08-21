@@ -253,6 +253,7 @@ sub atomic {
 	my $code  = shift;
 
 	my $dbHandler = $class->getConnection;
+	my $autoCommit = $dbHandler->{AutoCommit};
 	$dbHandler->{AutoCommit} = 0;
 	if ($dbHandler->{AutoCommit}) {
 		ConvoTreeEngine::Exception::Internal->throw(
@@ -277,13 +278,15 @@ sub atomic {
 		$ex->rethrow;
 	}
 
-	$dbHandler->{AutoCommit} = 1; ### Setting to one automatically commits
-	unless ($dbHandler->{AutoCommit}) {
-		$dbHandler->rollback;
-		ConvoTreeEngine::Exception::Internal->throw(
-			error => 'Unable to commit a transaction lock',
-			code  => 502,
-		);
+	if ($autoCommit) {
+		$dbHandler->{AutoCommit} = $autoCommit; ### Setting to one automatically commits
+		unless ($dbHandler->{AutoCommit}) {
+			$dbHandler->rollback;
+			ConvoTreeEngine::Exception::Internal->throw(
+				error => 'Unable to commit a transaction lock',
+				code  => 502,
+			);
+		}
 	}
 
 	return @response if wantarray;;

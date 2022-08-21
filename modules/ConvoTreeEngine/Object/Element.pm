@@ -201,8 +201,16 @@ sub delete {
 		return 1 if defined $value && length $value;
 		return 0;
 	};
+	my $positiveInt = sub {
+		### Returns true if the value looks like a positive integer
+		my $value = shift;
+		return 0 if !defined $value;
+		return 0 if ref $value;
+		return 0 if $value !~ m/^[1-9][0-9]*|0\z/;
+		return 1;
+	};
 	my $number = sub {
-		### Returns true if the value looks like a lofical number, either positive or negative, with or without decimal places
+		### Returns true if the value looks like a logical number, either positive or negative, with or without decimal places
 		my $value = shift;
 		return 0 if !defined $value;
 		return 0 if ref $value;
@@ -345,13 +353,17 @@ sub delete {
 
 	%typeValidation = (
 		item     => {
-			text => [1, $itemText],
+			text   => [1, $itemText],
+			delay  => [0, $positiveInt],
+			prompt => [0, $boolean],
 		},
 		note     => {
 			note => [1, $string],
 		},
 		raw      => {
-			html => [1, $string],
+			html   => [1, $string],
+			delay  => [0, $positiveInt],
+			prompt => [0, $boolean],
 		},
 		enter    => {
 			start => [1, $string],
@@ -380,7 +392,8 @@ sub delete {
 			choices => [1, $choices],
 		},
 		display  => {
-			disp => [1, $hash],
+			disp  => [1, $hash],
+			delay => [0, $positiveInt],
 		},
 		do       => {
 			function => [1, sub {
