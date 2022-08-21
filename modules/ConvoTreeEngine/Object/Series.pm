@@ -40,7 +40,7 @@ sub elements {
 	$self->{elements} || do {
 		my $full = $self->find({id => $self->id});
 		%$self = %$full;
-	}
+	};
 	return $self->{elements};
 }
 
@@ -49,7 +49,7 @@ sub series {
 	$self->{sequence} || do {
 		my $full = $self->find({id => $self->id});
 		%$self = %$full;
-	}
+	};
 	return $self->{sequence};
 }
 
@@ -246,7 +246,7 @@ sub assembleFromRows {
 					my $seriesDeeper = $series{$nested_series_id} || $assembled->{$nested_series_id};
 					next unless $seriesDeeper;
 
-					$series->{series}{$nested_series_id} = {
+					$series->{series}{$nested_series_id} = bless {
 						id       => $seriesDeeper->{id},
 						name     => $seriesDeeper->{name},
 						category => $seriesDeeper->{category},
