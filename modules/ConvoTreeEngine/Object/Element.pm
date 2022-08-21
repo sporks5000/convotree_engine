@@ -217,25 +217,27 @@ sub delete {
 		return 0 if $value !~ m/^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z/;
 		return 1;
 	},
-	my $itemText = sub {
+	my $itemBlock; $itemBlock = sub {
+		my $value = shift;
+		return 0 unless $array->($value);
+		### The first element will either be undefined or a string of words
+		return 0 if defined $value->[0] && $words->($value->[0]);
+		### The second element must be undefined, or a string, or another item block
+		return 0 if defined $value->[1] && !$string->($value->[1]) && !$itemBlock->($value->[1]);
+		### If the second element is undefined, the third element must be a single word (representing a variable name)
+		### Otherwise, there must be no third element
+		return 0 if defined $value->[1] && @$value > 2;
+		return 0 if !defined $value->[1] && !defined $value->[2];
+		return 0 if defined $value->[2] && !$variableName->($value->[2]);
+		return 0 if @$value > 3;
+		return 1;
+	};
+	my $item = sub {
 		### The value must be an array of arrays
 		my $value = shift;
 		return 0 unless $array->($value);
 		foreach my $deep (@$value) {
-			return 0 unless $array->($deep);
-			foreach my $deeper (@$deep) {
-				return 0 if ref $deeper;
-			}
-			### The first element will either be undefined or a string of words
-			return 0 if defined $deep->[0] && $words->($deep->[0]);
-			### The second element must be undefined or a string
-			return 0 if defined $deep->[1] && !$string->($deep->[1]);
-			### If the second element is undefined, the third element must be a single word (representing a variable name)
-			### Otherwise, there must be no third element
-			return 0 if defined $deep->[1] && @$deep > 2;
-			return 0 if !defined $deep->[1] && !defined $deep->[2];
-			return 0 if defined $deep->[2] && !$variableName->($deep->[2]);
-			return 0 if @$deep > 3;
+			return 0 unless $itemBlock->($deep);
 		}
 		return 1;
 	};
@@ -353,7 +355,7 @@ sub delete {
 
 	%typeValidation = (
 		item     => {
-			text   => [1, $itemText],
+			text   => [1, $item],
 			delay  => [0, $positiveInt],
 			prompt => [0, $boolean],
 		},
@@ -420,6 +422,7 @@ sub delete {
 		my $success = $elements->($json, $type);
 		ConvoTreeEngine::Exception::Input->throw(
 			error => 'Validation for Element JSON did not pass',
+			code  => 400,
 		) unless $success;
 
 		return JSON::encode_json($json);
