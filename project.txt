@@ -223,10 +223,13 @@ Requesting more data:
 Other details:
 	* Every hash will have a "type" and "id" field. They will be stored in the DB as json blobs
 	* In any instance where we could put a hash, we can instead just put an ID number
+	* Some elements should have a "delay" field indicating how long we should pause before the next element is displayed
+	* Some elements should have a "prompt" field, indicating a simple prompt before we move on to the next
 	* As the user moves through the conversation, the relevant IDs are stored in their local data.
 	* What choices they make and what if/then branches are taken are also stored in the local data.
 		* This means that we can reconstruct the page as they were originlly seen it from the user's local data.
 		* When reconstructing the page, "variable" blocks are ignored, (as we will have already updated the variables appropriately)
+		* When reconstructing the page, the "delay" and "prompt" fields should be ignored.
 
 
 

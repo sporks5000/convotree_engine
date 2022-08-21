@@ -31,6 +31,28 @@ sub category {
 	return shift->{category};
 }
 
+sub sequence {
+	return shift->{sequence};
+}
+
+sub elements {
+	my $self = shift;
+	$self->{elements} || do {
+		my $full = $self->find({id => $self->id});
+		%$self = %$full;
+	}
+	return $self->{elements};
+}
+
+sub series {
+	my $self = shift;
+	$self->{sequence} || do {
+		my $full = $self->find({id => $self->id});
+		%$self = %$full;
+	}
+	return $self->{sequence};
+}
+
 #==========#
 #== CRUD ==#
 #==========#
@@ -198,7 +220,7 @@ sub assembleFromRows {
 		my $series = $series{$id};
 		if ($deep) {
 			foreach my $element_id (keys %{$series->{elements}}) {
-				$series->{elements}{$element_id} = $elements{$element_id}->asHashRef;
+				$series->{elements}{$element_id} = $elements{$element_id};
 			}
 		}
 
@@ -209,25 +231,27 @@ sub assembleFromRows {
 				next;
 			}
 
-			$series->{series}{$series_id} = {
+			$series->{series}{$series_id} = bless {
+				id       => $seriesDeep->{id},
 				name     => $seriesDeep->{name},
 				category => $seriesDeep->{category},
 				sequence => $seriesDeep->{sequence},
-			};
+			}, 'ConvoTreeEngine::Object::Series';
 
 			if ($deep) {
 				foreach my $element_id (keys %{$seriesDeep->{elements}}) {
-					$series->{elements}{$element_id} ||= $elements{$element_id}->asHashRef if $elements{$element_id};
+					$series->{elements}{$element_id} ||= $elements{$element_id} if $elements{$element_id};
 				}
 				foreach my $nested_series_id (keys %{$seriesDeep->{series}}) {
 					my $seriesDeeper = $series{$nested_series_id} || $assembled->{$nested_series_id};
 					next unless $seriesDeeper;
 
 					$series->{series}{$nested_series_id} = {
+						id       => $seriesDeeper->{id},
 						name     => $seriesDeeper->{name},
 						category => $seriesDeeper->{category},
 						sequence => $seriesDeeper->{sequence},
-					};
+					}, 'ConvoTreeEngine::Object::Series';
 				}
 			}
 		}
@@ -278,26 +302,34 @@ sub delete {
 
 	return;
 }
+=cut
 
 #===========================#
 #== Returning Information ==#
 #===========================#
 
-sub jsonRef {
-	return JSON::decode_json(shift->json);
+sub elementsAsHashRefs {
+	my $self = shift;
+	my %elements = %{$self->elements};
+	%elements = map {$_ => $elements{$_}->asHashRef} keys %elements;
+	return \%elements;
+}
+
+sub seriesAsHashRefs {
+	my $self = shift;
+	my %series = %{$self->series};
+	%series = map {$_ => $series{$_}->asHashRef} keys %series;
+	return \%series;
 }
 
 sub asHashRef {
 	my $self = shift;
-
-	my $hash = $self->jsonRef;
-	$hash->{type}     = $self->type;
-	$hash->{id}       = $self->id;
-	$hash->{name}     = $self->name;
-	$hash->{category} = $self->category;
-
-	return $hash;
+	return {
+		id       => $self->id,
+		name     => $self->name,
+		category => $self->category,
+		sequence => $self->sequence,
+	};
 }
-=cut
 
 1;
