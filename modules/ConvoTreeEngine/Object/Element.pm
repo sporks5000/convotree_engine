@@ -457,14 +457,19 @@ sub _confirm_element_path {
 	my $path_id;
 	if ($pathVar =~ m/^path([0-9]+)\z/i) {
 		$path_id = $1;
-		ConvoTreeEngine::Object::ElementPath->findOrDie({id => $path_id});
+		my $path = ConvoTreeEngine::Object::ElementPath->findOrDie({id => $path_id});
+		if ($path->element_id != $self->id) {
+			my %pathArgs = (element_id => $self->id, series_id => $path->series_id);
+			$path = ConvoTreeEngine::Object::ElementPath->find(\%pathArgs) || ConvoTreeEngine::Object::ElementPath->create(\%pathArgs);
+			$path_id = $path->id;
+		}
 		if ($pathVar ne "PATH$path_id") {
 			$updated = "PATH$path_id";
 		}
 	}
 	elsif ($pathVar =~ m/^series([0-9]+)\z/i) {
 		my $series_id = $1;
-		my %pathArgs = (element_id => $self->id, series_id  => $series_id);
+		my %pathArgs = (element_id => $self->id, series_id => $series_id);
 		my $path = ConvoTreeEngine::Object::ElementPath->find(\%pathArgs) || ConvoTreeEngine::Object::ElementPath->create(\%pathArgs);
 		$path_id = $path->id;
 		$updated = "PATH$path_id";
