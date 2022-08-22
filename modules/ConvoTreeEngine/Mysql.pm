@@ -137,6 +137,7 @@ sub createTables {
 
 	$class->atomic(sub {
 		unless ($tableHash{c_element_types}) {
+			### A list of applicable element types, present just to restrict other things / typos from ending up in the mix
 			$class->doQuery(qq/
 				CREATE TABLE IF NOT EXISTS c_element_types (
 					type VARCHAR(15) PRIMARY KEY
@@ -153,6 +154,7 @@ sub createTables {
 		}
 
 		unless ($tableHash{element}) {
+			### The table containing elements
 			$class->doQuery(qq/
 				CREATE TABLE IF NOT EXISTS element (
 					id INT AUTO_INCREMENT PRIMARY KEY,
@@ -178,6 +180,7 @@ sub createTables {
 		}
 
 		unless ($tableHash{element_series}) {
+			### The main data for a series
 			$class->doQuery(qq/
 				CREATE TABLE IF NOT EXISTS element_series (
 					id INT AUTO_INCREMENT PRIMARY KEY,
@@ -196,19 +199,52 @@ sub createTables {
 			/);
 		}
 
+		unless ($tableHash{element_path}) {
+			### Certain element types have the ability to branch into different paths. This keeps track of those
+			$class->doQuery(qq/
+				CREATE TABLE IF NOT EXISTS element_path (
+					id BIGINT AUTO_INCREMENT PRIMARY KEY,
+					element_id INT NOT NULL,
+					series_id INT NOT NULL,
+					UNIQUE element_path_element_series_index
+						(element_id, series_id),
+					FOREIGN KEY (series_id)
+						REFERENCES element_series(id)
+						ON DELETE CASCADE
+						ON UPDATE CASCADE,
+					FOREIGN KEY (element_id)
+						REFERENCES element(id)
+						ON DELETE CASCADE
+						ON UPDATE CASCADE
+				)
+				ENGINE=InnoDB;
+			/);
+
+			$class->doQuery(qq/
+				CREATE INDEX element_path_to_series_id_index
+					USING BTREE
+					ON element_path(series_id);
+			/);
+
+			$class->doQuery(qq/
+				CREATE INDEX element_path_to_element_id_index
+					USING BTREE
+					ON element_path(element_id);
+			/);
+		}
+
 		unless ($tableHash{series_to_element}) {
+			### The data for the sequence of a series, as well as additional elements or series that are associated with the series
 			$class->doQuery(qq/
 				CREATE TABLE IF NOT EXISTS series_to_element (
 					series_id INT NOT NULL,
 					element_id INT,
 					nested_series_id INT,
 					sequence INT,
-					PRIMARY KEY (
-						series_id,
-						element_id,
-						nested_series_id,
-						sequence
-					),
+					UNIQUE series_to_element_parts_index
+						(series_id, element_id, series_id, nested_series_id),
+					UNIQUE series_to_element_sequence_index
+						(series_id, sequence),
 					FOREIGN KEY (series_id)
 						REFERENCES element_series(id)
 						ON DELETE CASCADE

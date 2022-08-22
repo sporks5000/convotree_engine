@@ -7,8 +7,22 @@ use warnings;
 
 use JSON;
 
+use ConvoTreeEngine::Object::ElementPath;
+
 sub _table {
 	return 'element';
+}
+
+sub _fields {
+	my @fields = qw(id type name category json);
+	return @fields if wantarray;
+	return join ', ', @fields;
+}
+
+sub _read_only_fields {
+	my @fields = qw(id type);
+	return @fields if wantarray;
+	return join ', ', @fields;
 }
 
 #=====================#
@@ -48,110 +62,44 @@ sub create {
 	$args->{category} //= undef;
 
 	my $table = $invocant->_table;
-	my $id = ConvoTreeEngine::Mysql->insertForId(
-		qq/INSERT INTO $table (type, name, category, json) VALUES(?, ?, ?, ?);/,
-		[$args->{type}, $args->{name}, $args->{category}, $args->{json}],
-	);
+	my $self;
+	$invocant->atomic(sub {
+		my $id = ConvoTreeEngine::Mysql->insertForId(
+			qq/INSERT INTO $table (type, name, category, json) VALUES(?, ?, ?, ?);/,
+			[$args->{type}, $args->{name}, $args->{category}, $args->{json}],
+		);
 
-	return $invocant->promote({
-		id       => $id,
-		type     => $args->{type},
-		name     => $args->{name},
-		category => $args->{category},
-		json     => $args->{json},
+		$self = $invocant->promote({
+			id       => $id,
+			type     => $args->{type},
+			name     => $args->{name},
+			category => $args->{category},
+			json     => $args->{json},
+		});
+
+		$self->doElementPaths;
 	});
-}
 
-sub search {
-	my $invocant = shift;
-	my ($args, $attrs) = $invocant->_prep_args_multi(2, @_);
-
-	my ($attrString, $bits) = $invocant->_parse_query_attrs($attrs);
-
-	my $whereString;
-	my @whereString;
-	my @input;
-	if ($args->{WHERE}) {
-		$whereString = $args->{WHERE};
-	}
-	else {
-		foreach my $field (keys $args) {
-			my $ref = ref($args->{$field}) || '';
-			if ($ref eq 'ARRAY') {
-				my $string .= "$field IN (" . join(',', ('?') x @{$args->{$field}}) . ')';
-				push @whereString, $string;
-				push @input, @{$args->{$field}};
-			}
-			elsif ($ref eq 'HASH' && scalar(keys %{$args->{$field}}) == 1) {
-				my ($key) = keys %{$args->{$field}};
-				my $value = $args->{$field}{$key};
-				push @whereString, "$field $key ?";
-				push @input, $value;
-			}
-			else {
-				push @whereString, "$field = ?";
-				push @input, $args->{$field};
-			}
-		}
-	}
-
-	$whereString ||= join ' AND ', @whereString;
-	$whereString = "WHERE $whereString" if $whereString;
-	push @input, @$bits;
-	my $table = $invocant->_table;
-	my $query = qq/
-		SELECT id, type, name, category, json FROM $table
-		$whereString
-		$attrString
-	/;
-	my $rows = ConvoTreeEngine::Mysql->fetchRows($query, \@input);
-
-	foreach my $row (@$rows) {
-		$invocant->promote($row);
-	}
-
-	return @$rows;
+	return $self;
 }
 
 sub update {
 	my $self = shift;
 	my $args = $self->_prep_args(@_);
 
+	my $skip_paths = delete $args->{skip_paths};
 	$args->{json} = $self->_validate_json($args->{json}, $self->type) if exists $args->{json};
 
-	my @sets;
-	my @bits;
-	foreach my $arg (keys %$args) {
-		ConvoTreeEngine::Exception::Input->throw(
-			error => "Only the 'json' field can be updated on the 'Element' object",
-			args  => $args,
-		) if $arg ne 'name' && $arg ne 'json' && $arg ne 'category';
-		push @sets, "$arg = ?";
-		push @bits, $args->{$arg};
-	}
-	my $sets = join ', ', @sets;
-	push @bits, $self->id;
+	$self->atomic(sub {
+		$self = $self->SUPER::update($args);
 
-	my $table = $self->_table;
-	ConvoTreeEngine::Mysql->doQuery(
-		qq/UPDATE $table SET $sets WHERE id = ?;/,
-		\@bits,
-	);
+		$self->doElementPaths unless $skip_paths;
+	});
 
-	return $self->refresh;
+	return $self;
 }
 
-sub delete {
-	my $self = shift;
-
-	my $table = $self->_table;
-	ConvoTreeEngine::Mysql->doQuery(
-		qq/DELETE FROM $table WHERE id = ?;/,
-		[$self->id],
-	);
-
-	return;
-}
+### Uses "search" and "delete" from the base class
 
 #================#
 #== Validation ==#
@@ -217,6 +165,14 @@ sub delete {
 		return 0 if $value !~ m/^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z/;
 		return 1;
 	},
+	my $pathIdent = sub {
+		### Returns true if the value looks like a an identifier for a path or a series
+		my $value = shift;
+		return 0 if !defined $value;
+		return 0 if ref $value;
+		return 0 if $value !~ m/^(path|series)[0-9]+\z/i;
+		return 1;
+	};
 	my $itemBlock; $itemBlock = sub {
 		my $value = shift;
 		return 0 unless $array->($value);
@@ -311,8 +267,8 @@ sub delete {
 		return 0 if defined $value->[0] && !$conditionString->($value->[0]);
 		return 0 if @$value > 2;
 		return 1 unless @$value == 2;
-		### If the second element is present, it will match the $elements test
-		return 0 unless $elements->($value->[1]);
+		### If the second element is present, it should be a path identifier
+		return 0 unless $pathIdent->($value->[1]);
 		return 1;
 	};
 	my $ifConditions = sub {
@@ -347,8 +303,8 @@ sub delete {
 			return 0 unless $string->($deep->[1]);
 			next if @$deep == 2;
 			return 0 if @$deep > 3;
-			### If there is a third element, it will match the $elements test
-			return 0 unless $elements->($deep->[2]);
+			### If there is a third element, it should be a path identifier
+			return 0 unless $pathIdent->($deep->[2]);
 		}
 		return 1;
 	};
@@ -427,6 +383,96 @@ sub delete {
 
 		return JSON::encode_json($json);
 	}
+}
+
+#===================#
+#== Other Methods ==#
+#===================#
+
+sub elementPaths {
+	my $self = shift;
+
+	my %paths = map {$_->id => $_} ConvoTreeEngine::Object::ElementPath->search({element_id => $self->id});
+	return \%paths;
+}
+
+sub doElementPaths {
+	my $self = shift;
+
+	my $jsonRef = $self->jsonRef;
+	my $paths = $self->elementPaths;
+
+	my $doUpdate = 0;
+	my $type = $self->type;
+	if ($type eq 'if') {
+		foreach my $condition (@{$jsonRef->{cond}}) {
+			if (@$condition > 1) {
+				if (my $update = $self->_confirm_element_path($condition->[1], $paths)) {
+					$condition->[1] = $update;
+					$doUpdate = 1;
+				}
+			}
+		}
+	}
+	elsif ($type eq 'assess') {
+		my $condition = $jsonRef->{cond};
+		if (@$condition > 1) {
+			if (my $update = $self->_confirm_element_path($condition->[1], $paths)) {
+				$condition->[1] = $update;
+				$doUpdate = 1;
+			}
+		}
+	}
+	elsif ($type eq 'choice') {
+		foreach my $choice (@{$jsonRef->{choices}}) {
+			if (@$choice > 2) {
+				if (my $update = $self->_confirm_element_path($choice->[2], $paths)) {
+					$choice->[2] = $update;
+					$doUpdate = 1;
+				}
+			}
+		}
+	}
+
+	if ($doUpdate) {
+		$self->update({json => $jsonRef, skip_paths => 1});
+	}
+	if (%$paths) {
+		my $toDelete = join(', ', keys %$paths);
+		my $table = ConvoTreeEngine::Object::ElementPath->_table;
+		ConvoTreeEngine::Mysql->doQuery(
+			qq/DELETE FROM $table WHERE id IN ($toDelete);/,
+		);
+	}
+
+	return;
+}
+
+sub _confirm_element_path {
+	my $self    = shift;
+	my $pathVar = shift;
+	my $paths   = shift;
+
+	my $updated;
+	my $path_id;
+	if ($pathVar =~ m/^path([0-9]+)\z/i) {
+		$path_id = $1;
+		ConvoTreeEngine::Object::ElementPath->findOrDie({id => $path_id});
+		if ($pathVar ne "PATH$path_id") {
+			$updated = "PATH$path_id";
+		}
+	}
+	elsif ($pathVar =~ m/^series([0-9]+)\z/i) {
+		my $series_id = $1;
+		my %pathArgs = (element_id => $self->id, series_id  => $series_id);
+		my $path = ConvoTreeEngine::Object::ElementPath->find(\%pathArgs) || ConvoTreeEngine::Object::ElementPath->create(\%pathArgs);
+		$path_id = $path->id;
+		$updated = "PATH$path_id";
+	}
+
+	delete $paths->{$path_id};
+
+	return $updated;
 }
 
 #===========================#
