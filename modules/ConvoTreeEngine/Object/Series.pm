@@ -87,6 +87,7 @@ sub search {
 	my ($args, $attrs) = $invocant->_prep_args_multi(2, @_);
 
 	my $just_rows = delete $attrs->{just_rows};
+	my $shallow   = delete $attrs->{shallow};
 
 	my $whereString;
 	my @whereString;
@@ -130,7 +131,18 @@ sub search {
 	my $rows = ConvoTreeEngine::Mysql->fetchRows($query, \@input);
 	return $rows if $just_rows;
 
-	my @assembled = $invocant->assembleFromRows($rows);
+	my @assembled;
+	if ($shallow) {
+		($assembled, my $moreElements) = $invocant->assembleFromRows($rows, 0);
+		foreach my $item (values %$assembled) {
+			delete $item->{elements};
+			delete $item->{series};
+			push @assembled, $item;
+		}
+	}
+	else {
+		@assembled = $invocant->assembleFromRows($rows);
+	}
 
 	##### TODO: Order by? Other things commonly asked for within $attrs?
 
@@ -157,22 +169,22 @@ least give a buffer before the next data request is needed.
 =cut
 
 sub assembleFromRows {
-	my $class = shift;
-	my $rows  = shift;
-	my $deep  = shift // 1;
+	my $invocant = shift;
+	my $rows     = shift;
+	my $deep     = shift // 1;
 
 	my %series;
 	my %series_needed;
 	my %elements;
 	foreach my $row (@$rows) {
-		$series{$row->{id}} ||= bless {
+		$series{$row->{id}} ||= $invocant->promote({
 			id       => $row->{id},
 			name     => $row->{name},
 			category => $row->{category},
 			sequence => [],
 			elements => {},
 			series   => {},
-		}, 'ConvoTreeEngine::Object::Series';
+		});
 
 		my $string;
 		if ($row->{nested_series_id}) {
@@ -198,8 +210,8 @@ sub assembleFromRows {
 	if ($deep) {
 		my $moreElements = {};
 		if (%series_needed) {
-			$rows = $class->search({id => [keys %series_needed]}, {just_rows => 1});
-			($assembled, $moreElements) = $class->assembleFromRows($rows, 0); ### Shallow assemble
+			$rows = $invocant->search({id => [keys %series_needed]}, {just_rows => 1});
+			($assembled, $moreElements) = $invocant->assembleFromRows($rows, 0); ### Shallow assemble
 		}
 
 		%elements = (
@@ -231,12 +243,12 @@ sub assembleFromRows {
 				next;
 			}
 
-			$series->{series}{$series_id} = bless {
+			$series->{series}{$series_id} = $invocant->promote({
 				id       => $seriesDeep->{id},
 				name     => $seriesDeep->{name},
 				category => $seriesDeep->{category},
 				sequence => $seriesDeep->{sequence},
-			}, 'ConvoTreeEngine::Object::Series';
+			});
 
 			if ($deep) {
 				foreach my $element_id (keys %{$seriesDeep->{elements}}) {
@@ -246,12 +258,12 @@ sub assembleFromRows {
 					my $seriesDeeper = $series{$nested_series_id} || $assembled->{$nested_series_id};
 					next unless $seriesDeeper;
 
-					$series->{series}{$nested_series_id} = bless {
+					$series->{series}{$nested_series_id} = $invocant->promote({
 						id       => $seriesDeeper->{id},
 						name     => $seriesDeeper->{name},
 						category => $seriesDeeper->{category},
 						sequence => $seriesDeeper->{sequence},
-					}, 'ConvoTreeEngine::Object::Series';
+					});
 				}
 			}
 		}

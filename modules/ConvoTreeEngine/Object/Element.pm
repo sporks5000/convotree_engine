@@ -272,7 +272,7 @@ sub delete {
 			}
 		}
 		else {
-			return 0 if $value =~ m/^(SERIES)?[0-9]+\z/;
+			return 0 if $value !~ m/^(SERIES)?[0-9]+\z/;
 		}
 		return 1;
 	};
