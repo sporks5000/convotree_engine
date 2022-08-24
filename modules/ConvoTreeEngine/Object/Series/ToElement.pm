@@ -11,7 +11,7 @@ use ConvoTreeEngine::Object::Element;
 use ConvoTreeEngine::Object::Series;
 
 sub _table {
-	return 'series_to_element';
+	return shift->SUPER::_table('series_to_element');
 }
 
 sub _fields {

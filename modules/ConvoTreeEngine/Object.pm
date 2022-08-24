@@ -3,7 +3,14 @@ package ConvoTreeEngine::Object;
 use strict;
 use warnings;
 
+use ConvoTreeEngine::Config;
 use ConvoTreeEngine::Mysql;
+
+sub _table {
+	my $self  = shift;
+	my $table = shift;
+	return $ConvoTreeEngine::Config::tablePrefix . $table;
+}
 
 sub _prep_args {
 	my $self = shift;
@@ -213,7 +220,7 @@ sub update {
 	foreach my $field (@ro) {
 		if (exists $args->{$field}) {
 			ConvoTreeEngine::Exception::Input->throw(
-				error => "The '$field' field cannot be updated on the 'Element' object",
+				error => "The '$field' field cannot be updated on the '" . ref $self . "' object",
 				args  => $args,
 			) if (defined $args->{$field} xor defined $self->$field()) || (defined $args->{$field} && $args->{$field} ne $self->$field());
 		}

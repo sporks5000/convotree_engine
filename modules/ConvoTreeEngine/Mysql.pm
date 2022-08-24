@@ -284,6 +284,18 @@ sub createTables {
 	return;
 }
 
+sub destroyTables {
+	my $class = shift;
+
+	$class->doQuery(qq/DROP TABLE IF EXISTS series_to_element;/);
+	$class->doQuery(qq/DROP TABLE IF EXISTS element_path;/);
+	$class->doQuery(qq/DROP TABLE IF EXISTS element_series;/);
+	$class->doQuery(qq/DROP TABLE IF EXISTS element;/);
+	$class->doQuery(qq/DROP TABLE IF EXISTS c_element_types;/);
+
+	return;
+}
+
 sub atomic {
 	my $class = shift;
 	my $code  = shift;

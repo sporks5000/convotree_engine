@@ -10,7 +10,7 @@ use JSON;
 use ConvoTreeEngine::Object::ElementPath;
 
 sub _table {
-	return 'element';
+	return shift->SUPER::_table('element');
 }
 
 sub _fields {

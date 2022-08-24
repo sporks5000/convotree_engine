@@ -9,4 +9,6 @@ our $dbHost = '';
 our $dbUser = '';
 our $dbPass = '';
 
+our $tablePrefix = '';
+
 1;
