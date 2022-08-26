@@ -111,13 +111,16 @@ sub update {
 	my $ignore = sub {
 		### no validation necessary; always returns true
 		return 1;
-	}
+	};
 	my $boolean = sub {
 		### Returns true if the value is strictly boolean
 		my $value = shift;
 		return 1 if !defined $value;
+		if (ref $value) {
+			return 1 if $value->isa('JSON::Boolean');
+			return 0;
+		}
 		return 1 if $value =~ /^[01]\z/;
-		return 1 if ref($value) && $value->isa('JSON::Boolean');
 		return 0;
 	};
 	my $hash = sub {
@@ -144,6 +147,14 @@ sub update {
 		return 0 if !defined $value;
 		return 0 if ref $value;
 		return 0 if $value !~ m/^(?:[a-zA-Z0-9_]+[ -]?)+\b\z/;
+		return 1;
+	};
+	my $word = sub {
+		### Returns true if the value is a single word containg letters numbers and/or underscores
+		my $value = shift;
+		return 0 if !defined $value;
+		return 0 if ref $value;
+		return 0 if $value !~ m/^[a-zA-Z0-9_]+\z/;
 		return 1;
 	};
 	my $string = sub {
@@ -174,7 +185,7 @@ sub update {
 		my $value = shift;
 		return 0 if !defined $value;
 		return 0 if ref $value;
-		return 0 if $value !~ m/^(path|series)[0-9]+\z/i;
+		return 0 if $value !~ m/^(path|series)?[0-9]+\z/i;
 		return 1;
 	};
 	my $itemBlock; $itemBlock = sub {
@@ -201,38 +212,39 @@ sub update {
 		}
 		return 1;
 	};
-	my $elements; $elements = sub {
-		### Either a hashref matching what's expected from an ConvoTreeEngine::Object::Element object (not including the ID)
-		### ...or positive integer representing the ID of an ConvoTreeEngine::Object::Element object
-		### ...or the word 'SERIES' followed by a positive integer represending an ConvoTreeEngine::Object::Series object
-		### ...or an arrayref made up of any/all of the above
+	my $singleElement = sub {
+		### Return true if the valus has the structure of a single element
 		my $value = shift;
 		my $type  = shift;
+		$type ||= $value->{type};
+		return 0 unless $type;
+		return 0 unless $typeValidation{$type};
+		return 0 unless (ref $value || '') eq 'HASH';
+		foreach my $key (keys %$value) {
+			next if $key eq 'type';
+			return 0 unless $typeValidation{$type}{$key};
+		}
+		foreach my $key (keys %{$typeValidation{$type}}) {
+			next unless $typeValidation{$type}{$key}[0] && exists $value->{$key};
+			return 0 if !exists $value->{$key};
+			### Make sure it passes validation for that element type
+			my $test = $typeValidation{$type}{$key}[1];
+			return 0 unless $test->($value->{$key});
+		}
+		return 1;
+	};
+	my $elementStrings = sub {
+		### An array fo element strings, or an element string
+		my $value = shift;
 		return 0 unless defined $value;
 		my $ref = ref $value || '';
 		if ($ref eq 'ARRAY') {
 			foreach my $element (@$value) {
-				return 0 unless $elements->($element);
-			}
-		}
-		elsif ($ref eq 'HASH') {
-			$type ||= $value->{type};
-			return 0 unless $type;
-			return 0 unless $typeValidation{$type};
-			foreach my $key (keys %$value) {
-				next if $key eq 'type';
-				return 0 unless $typeValidation{$type}{$key};
-			}
-			foreach my $key (keys %{$typeValidation{$type}}) {
-				next unless $typeValidation{$type}{$key}[0] && exists $value->{$key};
-				return 0 if !exists $value->{$key};
-				### Make sure it passes validation for that element type
-				my $test = $typeValidation{$type}{$key}[1];
-				return 0 unless $test->($value->{$key});
+				return 0 unless $pathIdent->($element);
 			}
 		}
 		else {
-			return 0 if $value !~ m/^(SERIES)?[0-9]+\z/;
+			return 0 unless $pathIdent->($value);
 		}
 		return 1;
 	};
@@ -258,7 +270,7 @@ sub update {
 			}
 			else {
 				### Otherwise the condition can be a single word
-				return 0 if $cond !~ m/^[a-zA-Z0-9_]+\z/;
+				return 0 unless $word->($cond);
 			}
 		}
 		return 1;
@@ -290,7 +302,9 @@ sub update {
 		return 0 unless $hash->($value);
 		foreach my $key (keys %$value) {
 			return 0 unless $variableName->($key);
-			return 0 unless !defined $value->{$key} || $string->($value->{$key});
+			return 0 unless !defined $value->{$key};
+			return 0 unless $string->($value->{$key});
+			return 0 if $value->{$key} =~ m/^[+*\/-]=/ && !$number->(substr($value->{$key}, 2));
 		}
 		return 1;
 	};
@@ -313,10 +327,35 @@ sub update {
 		return 1;
 	};
 
+	my %validations = (
+		ignore          => $ignore,
+		boolean         => $boolean,
+		hash            => $hash,
+		array           => $array,
+		variableName    => $variableName,
+		words           => $words,
+		word            => $word,
+		string          => $string,
+		positiveInt     => $positiveInt,
+		number          => $number,
+		pathIdent       => $pathIdent,
+		itemBlock       => $itemBlock,
+		item            => $item,
+		singleElement   => $singleElement,
+		elementStrings  => $elementStrings,
+		conditionString => $conditionString,
+		singleCondition => $singleCondition,
+		ifConditions    => $ifConditions,
+		variableUpdates => $variableUpdates,
+		choices         => $choices,
+	);
+
 	%typeValidation = (
 		item     => {
-			text  => [1, $item],
-			arbit => [0, $ignore],
+			text   => [1, $item],
+			delay  => [0, $positiveInt],
+			prompt => [0, $boolean],
+			arbit  => [0, $ignore],
 		},
 		note     => {
 			note  => [1, $string],
@@ -324,6 +363,8 @@ sub update {
 		},
 		raw      => {
 			html   => [1, $string],
+			delay  => [0, $positiveInt],
+			prompt => [0, $boolean],
 			arbit  => [0, $ignore],
 		},
 		enter    => {
@@ -350,6 +391,13 @@ sub update {
 			cond  => [1, $singleCondition],
 			arbit => [0, $ignore],
 		},
+		negate   => {
+			assess_id => [1, $positiveInt],
+			arbit     => [0, $ignore],
+		},
+		stop     => {
+			arbit     => [0, $ignore],
+		},
 		varaible => {
 			update => [1, $variableUpdates],
 			arbit  => [0, $ignore],
@@ -360,19 +408,18 @@ sub update {
 		},
 		display  => {
 			disp  => [1, $hash],
+			delay => [0, $positiveInt],
 			arbit => [0, $ignore],
 		},
 		do       => {
-			function => [1, sub {
-				my $value = shift;
-				return 0 if $value !~ m/^[a-zA-Z0-9_]+\z/;
-				return 1;
-			}],
+			function => [1, $word],
 			args     => [0, $array],
+			delay    => [0, $positiveInt],
 			arbit    => [0, $ignore],
+
 		},
 		data     => {
-			get   => [1, $elements],
+			get   => [1, $elementStrings],
 			arbit => [0, $ignore],
 		},
 	);
@@ -386,13 +433,25 @@ sub update {
 			$json = JSON::decode_json($json);
 		}
 
-		my $success = $elements->($json, $type);
+		my $success = $singleElement->($json, $type);
 		ConvoTreeEngine::Exception::Input->throw(
 			error => 'Validation for Element JSON did not pass',
 			code  => 400,
 		) unless $success;
 
 		return JSON::encode_json($json);
+	}
+
+	sub _validate_value {
+		my $invocant   = shift;
+		my $value      = shift;
+		my $validation = shift;
+
+		ConvoTreeEngine::Exception::Input->throw(
+			error => "Validation '$validation' does not exist",
+		) unless $validations{$validation};
+
+		return $validations{$validation}->($value);
 	}
 }
 

@@ -10,5 +10,6 @@ our $dbUser = '';
 our $dbPass = '';
 
 our $tablePrefix = '';
+our $testTablePrefix = '';
 
 1;

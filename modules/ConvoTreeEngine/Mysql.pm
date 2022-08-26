@@ -41,6 +41,9 @@ sub getConnection {
 			$class->createTables(%tableHash);
 		};
 		if (my $ex = $@) {
+			if ($ex->isa('Exception::Class::Base')) {
+				$ex->rethrow;
+			}
 			ConvoTreeEngine::Exception::Connectivity->throw(
 				error   => $ex,
 				service => 'mysql',
@@ -135,148 +138,130 @@ sub createTables {
 
 	my $dbHandler = $class->getConnection;
 
+	my $prefix = $ConvoTreeEngine::Config::tablePrefix;
+
 	$class->atomic(sub {
-		unless ($tableHash{c_element_types}) {
+		unless ($tableHash{"${prefix}c_element_types"}) {
 			### A list of applicable element types, present just to restrict other things / typos from ending up in the mix
 			$class->doQuery(qq/
-				CREATE TABLE IF NOT EXISTS c_element_types (
-					type VARCHAR(15) PRIMARY KEY
+				CREATE TABLE IF NOT EXISTS ${prefix}c_element_types (
+					type VARCHAR(15) PRIMARY KEY,
+					example JSON NOT NULL
 				)
 				ENGINE=InnoDB;
 			/);
 
-			$class->doQuery(qq/
-				INSERT IGNORE INTO c_element_types (type) VALUES
-					('item'),('note'),('raw'),('enter'),
-					('exit'),('if'),('assess'),('varaible'),
-					('choice'),('display'),('do'),('data');
-			/);
+			require JSON;
+			require ConvoTreeEngine::ElementExamples;
+			my $query = qq/INSERT IGNORE INTO ${prefix}c_element_types (type, example) VALUES /;
+			my @bits;
+			foreach my $type (qw/item note raw enter exit if assess varaible choice display do data negate stop/) {
+				my $example = $ConvoTreeEngine::ElementExamples::examples{$type};
+				$example = JSON::encode_json($example);
+				push @bits, $type, $example;
+				$query .= '(?, ?),';
+			}
+			$query = substr $query, 0, -1;
+
+			$class->doQuery($query, \@bits);
 		}
 
-		unless ($tableHash{element}) {
+		unless ($tableHash{"${prefix}element"}) {
 			### The table containing elements
 			$class->doQuery(qq/
-				CREATE TABLE IF NOT EXISTS element (
+				CREATE TABLE IF NOT EXISTS ${prefix}element (
 					id INT AUTO_INCREMENT PRIMARY KEY,
 					type VARCHAR(15) NOT NULL,
 					name VARCHAR(256),
 					category VARCHAR(50),
 					json JSON NOT NULL,
-					UNIQUE element_name_category_index
+					INDEX ${prefix}element_category_index
+						(category) USING BTREE,
+					UNIQUE ${prefix}element_name_category_index
 						(name, category),
 					FOREIGN KEY (type)
-						REFERENCES c_element_types(type)
+						REFERENCES ${prefix}c_element_types(type)
 						ON DELETE RESTRICT
 						ON UPDATE RESTRICT
 				)
 				ENGINE=InnoDB;
 			/);
-
-			$class->doQuery(qq/
-				CREATE INDEX element_category_index
-					USING BTREE
-					ON element(category);
-			/);
 		}
 
-		unless ($tableHash{element_series}) {
+		unless ($tableHash{"${prefix}element_series"}) {
 			### The main data for a series
 			$class->doQuery(qq/
-				CREATE TABLE IF NOT EXISTS element_series (
+				CREATE TABLE IF NOT EXISTS ${prefix}element_series (
 					id INT AUTO_INCREMENT PRIMARY KEY,
 					name VARCHAR(256) NOT NULL,
 					category VARCHAR(50) NOT NULL,
-					UNIQUE element_name_category_index
+					INDEX ${prefix}element_series_category_index
+						(category) USING BTREE,
+					UNIQUE ${prefix}element_name_category_index
 						(name, category)
 				)
 				ENGINE=InnoDB;
 			/);
-
-			$class->doQuery(qq/
-				CREATE INDEX element_series_category_index
-					USING BTREE
-					ON element_series(category);
-			/);
 		}
 
-		unless ($tableHash{element_path}) {
+		unless ($tableHash{"${prefix}element_path"}) {
 			### Certain element types have the ability to branch into different paths. This keeps track of those
 			$class->doQuery(qq/
-				CREATE TABLE IF NOT EXISTS element_path (
+				CREATE TABLE IF NOT EXISTS ${prefix}element_path (
 					id BIGINT AUTO_INCREMENT PRIMARY KEY,
 					element_id INT NOT NULL,
 					series_id INT NOT NULL,
-					UNIQUE element_path_element_series_index
+					INDEX ${prefix}element_path_to_series_id_index
+						(series_id) USING BTREE,
+					INDEX ${prefix}element_path_to_element_id_index
+						(element_id) USING BTREE,
+					UNIQUE ${prefix}element_path_element_series_index
 						(element_id, series_id),
 					FOREIGN KEY (series_id)
-						REFERENCES element_series(id)
+						REFERENCES ${prefix}element_series(id)
 						ON DELETE CASCADE
 						ON UPDATE CASCADE,
 					FOREIGN KEY (element_id)
-						REFERENCES element(id)
+						REFERENCES ${prefix}element(id)
 						ON DELETE CASCADE
 						ON UPDATE CASCADE
 				)
 				ENGINE=InnoDB;
 			/);
-
-			$class->doQuery(qq/
-				CREATE INDEX element_path_to_series_id_index
-					USING BTREE
-					ON element_path(series_id);
-			/);
-
-			$class->doQuery(qq/
-				CREATE INDEX element_path_to_element_id_index
-					USING BTREE
-					ON element_path(element_id);
-			/);
 		}
 
-		unless ($tableHash{series_to_element}) {
+		unless ($tableHash{"${prefix}series_to_element"}) {
 			### The data for the sequence of a series, as well as additional elements or series that are associated with the series
 			$class->doQuery(qq/
-				CREATE TABLE IF NOT EXISTS series_to_element (
+				CREATE TABLE IF NOT EXISTS ${prefix}series_to_element (
 					series_id INT NOT NULL,
 					element_id INT,
 					nested_series_id INT,
 					sequence INT,
-					UNIQUE series_to_element_parts_index
-						(series_id, element_id, series_id, nested_series_id),
-					UNIQUE series_to_element_sequence_index
+					INDEX ${prefix}series_to_element_series_id_index
+						(series_id) USING BTREE,
+					INDEX ${prefix}series_to_element_element_id_index
+						(element_id) USING BTREE,
+					INDEX ${prefix}series_to_element_nested_series_id_index
+						(nested_series_id) USING BTREE,
+					UNIQUE ${prefix}series_to_element_parts_index
+						(series_id, element_id, nested_series_id),
+					UNIQUE ${prefix}series_to_element_sequence_index
 						(series_id, sequence),
 					FOREIGN KEY (series_id)
-						REFERENCES element_series(id)
+						REFERENCES ${prefix}element_series(id)
 						ON DELETE CASCADE
 						ON UPDATE CASCADE,
 					FOREIGN KEY (element_id)
-						REFERENCES element(id)
+						REFERENCES ${prefix}element(id)
 						ON DELETE CASCADE
 						ON UPDATE CASCADE,
 					FOREIGN KEY (nested_series_id)
-						REFERENCES element_series(id)
+						REFERENCES ${prefix}element_series(id)
 						ON DELETE CASCADE
 						ON UPDATE CASCADE
 				)
 				ENGINE=InnoDB;
-			/);
-
-			$class->doQuery(qq/
-				CREATE INDEX series_to_element_series_id_index
-					USING BTREE
-					ON series_to_element(series_id);
-			/);
-
-			$class->doQuery(qq/
-				CREATE INDEX series_to_element_element_id_index
-					USING BTREE
-					ON series_to_element(element_id);
-			/);
-
-			$class->doQuery(qq/
-				CREATE INDEX series_to_element_nested_series_id_index
-					USING BTREE
-					ON series_to_element(nested_series_id);
 			/);
 		}
 	});
@@ -287,11 +272,13 @@ sub createTables {
 sub destroyTables {
 	my $class = shift;
 
-	$class->doQuery(qq/DROP TABLE IF EXISTS series_to_element;/);
-	$class->doQuery(qq/DROP TABLE IF EXISTS element_path;/);
-	$class->doQuery(qq/DROP TABLE IF EXISTS element_series;/);
-	$class->doQuery(qq/DROP TABLE IF EXISTS element;/);
-	$class->doQuery(qq/DROP TABLE IF EXISTS c_element_types;/);
+	my $prefix = $ConvoTreeEngine::Config::tablePrefix;
+
+	$class->doQuery(qq/DROP TABLE IF EXISTS ${prefix}series_to_element;/);
+	$class->doQuery(qq/DROP TABLE IF EXISTS ${prefix}element_path;/);
+	$class->doQuery(qq/DROP TABLE IF EXISTS ${prefix}element_series;/);
+	$class->doQuery(qq/DROP TABLE IF EXISTS ${prefix}element;/);
+	$class->doQuery(qq/DROP TABLE IF EXISTS ${prefix}c_element_types;/);
 
 	return;
 }
