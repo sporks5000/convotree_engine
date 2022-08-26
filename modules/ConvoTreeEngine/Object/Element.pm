@@ -108,6 +108,10 @@ sub update {
 {
 	my %typeValidation;
 
+	my $ignore = sub {
+		### no validation necessary; always returns true
+		return 1;
+	}
 	my $boolean = sub {
 		### Returns true if the value is strictly boolean
 		my $value = shift;
@@ -311,47 +315,52 @@ sub update {
 
 	%typeValidation = (
 		item     => {
-			text   => [1, $item],
-			delay  => [0, $positiveInt],
-			prompt => [0, $boolean],
+			text  => [1, $item],
+			arbit => [0, $ignore],
 		},
 		note     => {
-			note => [1, $string],
+			note  => [1, $string],
+			arbit => [0, $ignore],
 		},
 		raw      => {
 			html   => [1, $string],
-			delay  => [0, $positiveInt],
-			prompt => [0, $boolean],
+			arbit  => [0, $ignore],
 		},
 		enter    => {
 			start => [1, $string],
 			end   => [1, $string],
 			name  => [1, $words],
+			arbit => [0, $ignore],
 		},
 		exit     => {
-			name => [1, sub {
+			name  => [1, sub {
 				my $value = shift;
 				return 1 if !defined $value;
 				return 1 if $words->($value);
 				return 0;
 			}],
-			all  => [0, $boolean],
+			all   => [0, $boolean],
+			arbit => [0, $ignore],
 		},
 		if       => {
-			cond => [1, $ifConditions],
+			cond  => [1, $ifConditions],
+			arbit => [0, $ignore],
 		},
 		assess   => {
-			cond => [1, $singleCondition],
+			cond  => [1, $singleCondition],
+			arbit => [0, $ignore],
 		},
 		varaible => {
 			update => [1, $variableUpdates],
+			arbit  => [0, $ignore],
 		},
 		choice   => {
 			choices => [1, $choices],
+			arbit  => [0, $ignore],
 		},
 		display  => {
 			disp  => [1, $hash],
-			delay => [0, $positiveInt],
+			arbit => [0, $ignore],
 		},
 		do       => {
 			function => [1, sub {
@@ -360,9 +369,11 @@ sub update {
 				return 1;
 			}],
 			args     => [0, $array],
+			arbit    => [0, $ignore],
 		},
 		data     => {
-			get => [1, $elements],
+			get   => [1, $elements],
+			arbit => [0, $ignore],
 		},
 	);
 
