@@ -112,6 +112,11 @@ sub update {
 		### no validation necessary; always returns true
 		return 1;
 	};
+	my $undefined = sub {
+		my $value = shift;
+		return 0 if defined $value;
+		return 1;
+	};
 	my $boolean = sub {
 		### Returns true if the value is strictly boolean
 		my $value = shift;
@@ -444,14 +449,23 @@ sub update {
 
 	sub _validate_value {
 		my $invocant   = shift;
-		my $value      = shift;
+		my $valueArgs  = shift;
 		my $validation = shift;
 
-		ConvoTreeEngine::Exception::Input->throw(
-			error => "Validation '$validation' does not exist",
-		) unless $validations{$validation};
+		$valueArgs  = [$valueArgs]  unless ref $valueArgs;
+		$validation = [$validation] unless ref $validation;
 
-		return $validations{$validation}->($value);
+		my $isValid;
+		foreach my $v (@$validation) {
+			ConvoTreeEngine::Exception::Input->throw(
+				error => "Validation '$validation' does not exist",
+			) unless $validations{$validation};
+
+			$isValid = $validations{$validation}->(@$valueArgs);
+			return $isValid if $isValid;
+		}
+
+		return $isValid;
 	}
 }
 
