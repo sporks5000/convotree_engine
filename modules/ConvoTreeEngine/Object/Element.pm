@@ -113,13 +113,13 @@ sub update {
 		return 1;
 	};
 	my $undefined = sub {
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 if defined $value;
 		return 1;
 	};
 	my $boolean = sub {
 		### Returns true if the value is strictly boolean
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 1 if !defined $value;
 		if (ref $value) {
 			return 1 if $value->isa('JSON::Boolean');
@@ -129,18 +129,18 @@ sub update {
 		return 0;
 	};
 	my $hash = sub {
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 unless (ref $value || '' ) eq 'HASH';
 		return 1;
 	};
 	my $array = sub {
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 unless (ref $value || '' ) eq 'ARRAY';
 		return 1;
 	};
 	my $variableName = sub {
 		### Returns true if the value matches what we expect from a javascript variable name
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 unless defined $value;
 		return 0 if ref $value;
 		return 0 if $value !~ m/^[a-zA-Z0-9_.]+\z/;
@@ -148,7 +148,7 @@ sub update {
 	};
 	my $words = sub {
 		### Returns true if the value is a string of words separated by either single spaces or single hyphens
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 if !defined $value;
 		return 0 if ref $value;
 		return 0 if $value !~ m/^(?:[a-zA-Z0-9_]+[ -]?)+\b\z/;
@@ -156,7 +156,7 @@ sub update {
 	};
 	my $word = sub {
 		### Returns true if the value is a single word containg letters numbers and/or underscores
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 if !defined $value;
 		return 0 if ref $value;
 		return 0 if $value !~ m/^[a-zA-Z0-9_]+\z/;
@@ -164,14 +164,14 @@ sub update {
 	};
 	my $string = sub {
 		### returns true if the value is a text string
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 if ref $value;
 		return 1 if defined $value && length $value;
 		return 0;
 	};
 	my $positiveInt = sub {
 		### Returns true if the value looks like a positive integer
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 if !defined $value;
 		return 0 if ref $value;
 		return 0 if $value !~ m/^[1-9][0-9]*|0\z/;
@@ -179,7 +179,7 @@ sub update {
 	};
 	my $number = sub {
 		### Returns true if the value looks like a logical number, either positive or negative, with or without decimal places
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 if !defined $value;
 		return 0 if ref $value;
 		return 0 if $value !~ m/^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z/;
@@ -187,14 +187,14 @@ sub update {
 	},
 	my $pathIdent = sub {
 		### Returns true if the value looks like a an identifier for a path or a series
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 if !defined $value;
 		return 0 if ref $value;
 		return 0 if $value !~ m/^(path|series)?[0-9]+\z/i;
 		return 1;
 	};
 	my $itemBlock; $itemBlock = sub {
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 unless $array->($value);
 		### The first element will either be undefined or a string of words
 		return 0 if defined $value->[0] && $words->($value->[0]);
@@ -210,7 +210,7 @@ sub update {
 	};
 	my $item = sub {
 		### The value must be an array of arrays
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 unless $array->($value);
 		foreach my $deep (@$value) {
 			return 0 unless $itemBlock->($deep);
@@ -219,8 +219,7 @@ sub update {
 	};
 	my $singleElement = sub {
 		### Return true if the valus has the structure of a single element
-		my $value = shift;
-		my $type  = shift;
+		my ($class, $value, $type) = @_;
 		$type ||= $value->{type};
 		return 0 unless $type;
 		return 0 unless $typeValidation{$type};
@@ -234,13 +233,13 @@ sub update {
 			return 0 if !exists $value->{$key};
 			### Make sure it passes validation for that element type
 			my $test = $typeValidation{$type}{$key}[1];
-			return 0 unless $test->($value->{$key});
+			return 0 unless $test->($class, $value->{$key});
 		}
 		return 1;
 	};
 	my $elementStrings = sub {
 		### An array fo element strings, or an element string
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 unless defined $value;
 		my $ref = ref $value || '';
 		if ($ref eq 'ARRAY') {
@@ -254,8 +253,8 @@ sub update {
 		return 1;
 	};
 	my $conditionString = sub {
-		### A string of text, potentially of multiple parts separated with and/or operators ('&' or '\')
-		my $value = shift;
+		### A string of text, potentially of multiple parts separated with and/or operators ('&' or '|')
+		my ($class, $value) = @_;
 		return 1 if !defined $value;
 		return 0 if ref $value;
 		return 0 if !length $value;
@@ -282,7 +281,7 @@ sub update {
 	};
 	my $singleCondition = sub {
 		### the value will be an array
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 unless $array->($value);
 		### The first element will either be undefined or a condition string
 		return 0 if defined $value->[0] && !$conditionString->($value->[0]);
@@ -294,7 +293,7 @@ sub update {
 	};
 	my $ifConditions = sub {
 		### The value must be an array of arrays
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 unless $array->($value);
 		foreach my $deep (@$value) {
 			return 0 unless $singleCondition->($deep);
@@ -303,7 +302,7 @@ sub update {
 	};
 	my $variableUpdates = sub {
 		### Returns true if given a hash of variable names to strings (or undefineds)
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 unless $hash->($value);
 		foreach my $key (keys %$value) {
 			return 0 unless $variableName->($key);
@@ -315,7 +314,7 @@ sub update {
 	};
 	my $choices = sub {
 		### The value must be an array of arrays
-		my $value = shift;
+		my ($class, $value) = @_;
 		return 0 unless $array->($value);
 		foreach my $deep (@$value) {
 			return 0 unless defined $deep;
@@ -334,6 +333,7 @@ sub update {
 
 	my %validations = (
 		ignore          => $ignore,
+		undefined       => $undefined,
 		boolean         => $boolean,
 		hash            => $hash,
 		array           => $array,
@@ -434,11 +434,13 @@ sub update {
 		my $json     = shift;
 		my $type     = shift;
 
+		my $class = ref $invocant || $invocant;
+
 		unless (ref $json) {
 			$json = JSON::decode_json($json);
 		}
 
-		my $success = $singleElement->($json, $type);
+		my $success = $singleElement->($class, $json, $type);
 		ConvoTreeEngine::Exception::Input->throw(
 			error => 'Validation for Element JSON did not pass',
 			code  => 400,
@@ -452,6 +454,8 @@ sub update {
 		my $valueArgs  = shift;
 		my $validation = shift;
 
+		my $class = ref $invocant || $invocant;
+
 		$valueArgs  = [$valueArgs]  unless ref $valueArgs;
 		$validation = [$validation] unless ref $validation;
 
@@ -461,7 +465,7 @@ sub update {
 				error => "Validation '$validation' does not exist",
 			) unless $validations{$validation};
 
-			$isValid = $validations{$validation}->(@$valueArgs);
+			$isValid = $validations{$validation}->($class, @$valueArgs);
 			return $isValid if $isValid;
 		}
 
