@@ -58,9 +58,13 @@ sub closeConnection {
 	my $class = shift;
 
 	if (defined $dbHandler) {
-		$dbHandler->disconnect();
+		eval {
+			$dbHandler->disconnect();
+		};
 		undef $dbHandler;
 	}
+
+	return;
 }
 
 sub fetchRows {
@@ -68,9 +72,9 @@ sub fetchRows {
 	my $query = shift;
 	my $bits  = shift || [];
 
-	my $dbHandler = $class->getConnection;
 	my $rows;
 	$class->doQuery(sub {
+		my $dbHandler = $class->getConnection;
 		my $queryHandler = $dbHandler->prepare($query);
 		$queryHandler->execute(@$bits);
 		$rows = $queryHandler->fetchall_arrayref({});
@@ -85,9 +89,9 @@ sub insertForId {
 	my $query = shift;
 	my $bits  = shift || [];
 
-	my $dbHandler = $class->getConnection;
 	my $id;
 	$class->doQuery(sub {
+		my $dbHandler = $class->getConnection;
 		my $queryHandler = $dbHandler->prepare($query);
 		$queryHandler->execute(@$bits);
 		$queryHandler->finish();
@@ -111,22 +115,30 @@ sub doQuery {
 	}
 	my $bits = shift || [];
 
-	eval {
-		if ($code) {
-			$code->();
+	while (1) {
+		eval {
+			if ($code) {
+				$code->();
+			}
+			else {
+				my $dbHandler = $class->getConnection;
+				my $queryHandler = $dbHandler->prepare($query);
+				$queryHandler->execute(@$bits);
+				$queryHandler->finish();
+			}
+		};
+		if (my $ex = $@) {
+			if ($ex =~ m/The client was disconnected by the server because of inactivity/) {
+				$class->closeConnection;
+				next;
+			}
+			ConvoTreeEngine::Exception::SQL->throw(
+				error => "$ex",
+				sql   => $query,
+				args  => $bits,
+			);
 		}
-		else {
-			my $queryHandler = $dbHandler->prepare($query);
-			$queryHandler->execute(@$bits);
-			$queryHandler->finish();
-		}
-	};
-	if (my $ex = $@) {
-		ConvoTreeEngine::Exception::SQL->throw(
-			error => "$ex",
-			sql   => $query,
-			args  => $bits,
-		);
+		last;
 	}
 
 	return
