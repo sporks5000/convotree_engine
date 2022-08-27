@@ -42,6 +42,7 @@ foreach my $row (@$rows) {
 		});
 	};
 	if (my $ex = $@) {
+		ConvoTreeEngine::Exception::Unexpected->promote($ex);
 		print STDERR "Type: $row->{type}\n";
 		$ex->rethrow;
 	}

@@ -195,25 +195,25 @@ sub update {
 	};
 	my $itemBlock; $itemBlock = sub {
 		my ($class, $value) = @_;
-		return 0 unless $array->($value);
+		return 0 unless $class->_validate_value($value, 'array');
 		### The first element will either be undefined or a string of words
-		return 0 if defined $value->[0] && $words->($value->[0]);
+		return 0 if defined $value->[0] && $class->_validate_value($value->[0], 'words');
 		### The second element must be undefined, or a string, or another item block
-		return 0 if defined $value->[1] && !$string->($value->[1]) && !$itemBlock->($value->[1]);
+		return 0 if defined $value->[1] && !$class->_validate_value($value->[1], 'string') && !$class->_validate_value($value->[0], 'itemBlock');
 		### If the second element is undefined, the third element must be a single word (representing a variable name)
 		### Otherwise, there must be no third element
 		return 0 if defined $value->[1] && @$value > 2;
 		return 0 if !defined $value->[1] && !defined $value->[2];
-		return 0 if defined $value->[2] && !$variableName->($value->[2]);
+		return 0 if defined $value->[2] && !$class->_validate_value($value->[2], 'variableName');
 		return 0 if @$value > 3;
 		return 1;
 	};
 	my $item = sub {
 		### The value must be an array of arrays
 		my ($class, $value) = @_;
-		return 0 unless $array->($value);
+		return 0 unless $class->_validate_value($value, 'array');
 		foreach my $deep (@$value) {
-			return 0 unless $itemBlock->($deep);
+			return 0 unless $class->_validate_value($deep, 'itemBlock');
 		}
 		return 1;
 	};
@@ -232,8 +232,7 @@ sub update {
 			next unless $typeValidation{$type}{$key}[0] && exists $value->{$key};
 			return 0 if !exists $value->{$key};
 			### Make sure it passes validation for that element type
-			my $test = $typeValidation{$type}{$key}[1];
-			return 0 unless $test->($class, $value->{$key});
+			return 0 unless $class->_validate_value($value->{$key}, $typeValidation{$type}{$key}[1]);
 		}
 		return 1;
 	};
@@ -244,11 +243,11 @@ sub update {
 		my $ref = ref $value || '';
 		if ($ref eq 'ARRAY') {
 			foreach my $element (@$value) {
-				return 0 unless $pathIdent->($element);
+				return 0 unless $class->_validate_value($element, 'pathIdent');
 			}
 		}
 		else {
-			return 0 unless $pathIdent->($value);
+			return 0 unless $class->_validate_value($value, 'pathIdent');
 		}
 		return 1;
 	};
@@ -267,14 +266,14 @@ sub update {
 				$part =~ m/(=|!=|>|<|>=|<=)/;
 				$1;
 			};
-			return 0 unless $variableName->($varName);
+			return 0 unless $class->_validate_value($varName, 'variableName');
 			if ($operator =~ m/[<>]/) {
 				### If the operator is specific to numbers, make sure that the condition is a number
-				return 0 unless $number->($cond);
+				return 0 unless $class->_validate_value($cond, 'number');
 			}
 			else {
 				### Otherwise the condition can be a single word
-				return 0 unless $word->($cond);
+				return 0 unless $class->_validate_value($cond, 'word');
 			}
 		}
 		return 1;
@@ -282,51 +281,51 @@ sub update {
 	my $singleCondition = sub {
 		### the value will be an array
 		my ($class, $value) = @_;
-		return 0 unless $array->($value);
+		return 0 unless $class->_validate_value($value, 'array');
 		### The first element will either be undefined or a condition string
-		return 0 if defined $value->[0] && !$conditionString->($value->[0]);
+		return 0 if defined $value->[0] && !$class->_validate_value($value->[0], 'conditionString');
 		return 0 if @$value > 2;
 		return 1 unless @$value == 2;
 		### If the second element is present, it should be a path identifier
-		return 0 unless $pathIdent->($value->[1]);
+		return 0 unless $class->_validate_value($value->[1], 'pathIdent');
 		return 1;
 	};
 	my $ifConditions = sub {
 		### The value must be an array of arrays
 		my ($class, $value) = @_;
-		return 0 unless $array->($value);
+		return 0 unless $class->_validate_value($value, 'array');
 		foreach my $deep (@$value) {
-			return 0 unless $singleCondition->($deep);
+			return 0 unless $class->_validate_value($deep, 'singleCondition');
 		}
 		return 1;
 	};
 	my $variableUpdates = sub {
 		### Returns true if given a hash of variable names to strings (or undefineds)
 		my ($class, $value) = @_;
-		return 0 unless $hash->($value);
+		return 0 unless $class->_validate_value($value, 'hash');
 		foreach my $key (keys %$value) {
-			return 0 unless $variableName->($key);
+			return 0 unless $class->_validate_value($key, 'variableName');
 			return 0 unless !defined $value->{$key};
-			return 0 unless $string->($value->{$key});
-			return 0 if $value->{$key} =~ m/^[+*\/-]=/ && !$number->(substr($value->{$key}, 2));
+			return 0 unless $class->_validate_value($value->{$key}, 'string');
+			return 0 if $value->{$key} =~ m/^[+*\/-]=/ && !$class->_validate_value(substr($value->{$key}, 2), 'number');
 		}
 		return 1;
 	};
 	my $choices = sub {
 		### The value must be an array of arrays
 		my ($class, $value) = @_;
-		return 0 unless $array->($value);
+		return 0 unless $class->_validate_value($value, 'array');
 		foreach my $deep (@$value) {
 			return 0 unless defined $deep;
-			return 0 unless $array->($deep);
+			return 0 unless $class->_validate_value($deep, 'array');
 			### The first element will be a condition string
-			return 0 unless $conditionString->($deep->[0]);
+			return 0 unless $class->_validate_value($deep->[0], 'conditionString');
 			### The second element will be what we display for the choice
-			return 0 unless $string->($deep->[1]);
+			return 0 unless $class->_validate_value($deep->[1], 'string');
 			next if @$deep == 2;
 			return 0 if @$deep > 3;
 			### If there is a third element, it should be a path identifier
-			return 0 unless $pathIdent->($deep->[2]);
+			return 0 unless $class->_validate_value($deep->[2], 'pathIdent');
 		}
 		return 1;
 	};
@@ -357,75 +356,70 @@ sub update {
 
 	%typeValidation = (
 		item     => {
-			text   => [1, $item],
-			delay  => [0, $positiveInt],
-			prompt => [0, $boolean],
-			arbit  => [0, $ignore],
+			text   => [1, 'item'],
+			delay  => [0, 'positiveInt'],
+			prompt => [0, 'boolean'],
+			arbit  => [0, 'ignore'],
 		},
 		note     => {
-			note  => [1, $string],
-			arbit => [0, $ignore],
+			note  => [1, 'string'],
+			arbit => [0, 'ignore'],
 		},
 		raw      => {
-			html   => [1, $string],
-			delay  => [0, $positiveInt],
-			prompt => [0, $boolean],
-			arbit  => [0, $ignore],
+			html   => [1, 'string'],
+			delay  => [0, 'positiveInt'],
+			prompt => [0, 'boolean'],
+			arbit  => [0, 'ignore'],
 		},
 		enter    => {
-			start => [1, $string],
-			end   => [1, $string],
-			name  => [1, $words],
-			arbit => [0, $ignore],
+			start => [1, 'string'],
+			end   => [1, 'string'],
+			name  => [1, 'words'],
+			arbit => [0, 'ignore'],
 		},
 		exit     => {
-			name  => [1, sub {
-				my $value = shift;
-				return 1 if !defined $value;
-				return 1 if $words->($value);
-				return 0;
-			}],
-			all   => [0, $boolean],
-			arbit => [0, $ignore],
+			name  => [1, ['undefined', 'words']],
+			all   => [0, 'boolean'],
+			arbit => [0, 'ignore'],
 		},
 		if       => {
-			cond  => [1, $ifConditions],
-			arbit => [0, $ignore],
+			cond  => [1, 'ifConditions'],
+			arbit => [0, 'ignore'],
 		},
 		assess   => {
-			cond  => [1, $singleCondition],
-			arbit => [0, $ignore],
+			cond  => [1, 'singleCondition'],
+			arbit => [0, 'ignore'],
 		},
 		negate   => {
-			assess_id => [1, $positiveInt],
-			arbit     => [0, $ignore],
+			assess_id => [1, 'positiveInt'],
+			arbit     => [0, 'ignore'],
 		},
 		stop     => {
-			arbit     => [0, $ignore],
+			arbit     => [0, 'ignore'],
 		},
 		varaible => {
-			update => [1, $variableUpdates],
-			arbit  => [0, $ignore],
+			update => [1, 'variableUpdates'],
+			arbit  => [0, 'ignore'],
 		},
 		choice   => {
-			choices => [1, $choices],
-			arbit  => [0, $ignore],
+			choices => [1, 'choices'],
+			arbit   => [0, 'ignore'],
 		},
 		display  => {
-			disp  => [1, $hash],
-			delay => [0, $positiveInt],
-			arbit => [0, $ignore],
+			disp  => [1, 'hash'],
+			delay => [0, 'positiveInt'],
+			arbit => [0, 'ignore'],
 		},
 		do       => {
-			function => [1, $word],
-			args     => [0, $array],
-			delay    => [0, $positiveInt],
-			arbit    => [0, $ignore],
+			function => [1, 'word'],
+			args     => [0, 'array'],
+			delay    => [0, 'positiveInt'],
+			arbit    => [0, 'ignore'],
 
 		},
 		data     => {
-			get   => [1, $elementStrings],
-			arbit => [0, $ignore],
+			get   => [1, 'elementStrings'],
+			arbit => [0, 'ignore'],
 		},
 	);
 
@@ -440,36 +434,57 @@ sub update {
 			$json = JSON::decode_json($json);
 		}
 
-		my $success = $singleElement->($class, $json, $type);
-		ConvoTreeEngine::Exception::Input->throw(
-			error => 'Validation for Element JSON did not pass',
-			code  => 400,
-		) unless $success;
+		my $success = $class->_validate_value($json, $type, 'singleElement');
+		unless ($success) {
+			my $failures = $class->_validation_failures;
+			ConvoTreeEngine::Exception::Input->throw(
+				error => "Validation for Element JSON did not pass:\n$failures",
+				code  => 400,
+			);
+		}
 
 		return JSON::encode_json($json);
 	}
 
+	my @failures;
+	my $top = 1;
 	sub _validate_value {
 		my $invocant   = shift;
-		my $valueArgs  = shift;
-		my $validation = shift;
+		my $value      = shift;
+		my @additional = @_;
+		my $validation = pop @additional;
 
 		my $class = ref $invocant || $invocant;
 
-		$valueArgs  = [$valueArgs]  unless ref $valueArgs;
+		my $prev_top = $top;
+		if ($top == 1) {
+			@failures = ();
+		}
+		$top = 0;
+
 		$validation = [$validation] unless ref $validation;
+		unshift @additional, $value;
 
 		my $isValid;
 		foreach my $v (@$validation) {
 			ConvoTreeEngine::Exception::Input->throw(
-				error => "Validation '$validation' does not exist",
-			) unless $validations{$validation};
+				error => "Validation '$v' does not exist",
+			) unless $validations{$v};
 
-			$isValid = $validations{$validation}->($class, @$valueArgs);
+			$isValid = $validations{$v}->($class, @additional);
 			return $isValid if $isValid;
 		}
 
+		push @failures, "* Value(s) '" . JSON::encode_json($value) . "' did not meet validation(s) '" . join("', '", @$validation) . "'";
+
+		$top = $prev_top;
 		return $isValid;
+	}
+
+	sub _validation_failures {
+		my $invocant = shift;
+
+		return join "\n", @failures;
 	}
 }
 
