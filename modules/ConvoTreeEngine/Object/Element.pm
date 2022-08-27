@@ -190,7 +190,15 @@ sub update {
 		my ($class, $value) = @_;
 		return 0 if !defined $value;
 		return 0 if ref $value;
-		return 0 if $value !~ m/^(path|series)?[0-9]+\z/i;
+		return 0 if $value !~ m/^(path|series)[0-9]+\z/i;
+		return 1;
+	};
+	my $elementString = sub {
+		### Returns true if the value looks like a an identifier for a series or element
+		my ($class, $value) = @_;
+		return 0 if !defined $value;
+		return 0 if ref $value;
+		return 0 if $value !~ m/^(series)?[0-9]+\z/i;
 		return 1;
 	};
 	my $itemBlock; $itemBlock = sub {
@@ -237,17 +245,17 @@ sub update {
 		return 1;
 	};
 	my $elementStrings = sub {
-		### An array fo element strings, or an element string
+		### An array of element strings, or a single element string
 		my ($class, $value) = @_;
 		return 0 unless defined $value;
 		my $ref = ref $value || '';
 		if ($ref eq 'ARRAY') {
 			foreach my $element (@$value) {
-				return 0 unless $class->_validate_value($element, 'pathIdent');
+				return 0 unless $class->_validate_value($element, 'elementString');
 			}
 		}
 		else {
-			return 0 unless $class->_validate_value($value, 'pathIdent');
+			return 0 unless $class->_validate_value($value, 'elementString');
 		}
 		return 1;
 	};
@@ -260,12 +268,13 @@ sub update {
 		my @parts = split m/\s*(&|\|)\s*/, $value;
 		foreach my $part (@parts) {
 			### Each part contains a variable name, an operator, and a condition
-			my ($varName, $cond, @other) = split m/\s*(=|!=|>|<|>=|<=)\s*/, $part;
-			return 0 if @other;
 			my $operator = do {
-				$part =~ m/(=|!=|>|<|>=|<=)/;
+				$part =~ m/([!><]=|[=><])/;
 				$1;
 			};
+			return 0 unless $operator;
+			my ($varName, $cond, @other) = split m/\s*$operator\s*/, $part;
+			return 0 if @other;
 			return 0 unless $class->_validate_value($varName, 'variableName');
 			if ($operator =~ m/[<>]/) {
 				### If the operator is specific to numbers, make sure that the condition is a number
@@ -475,7 +484,8 @@ sub update {
 			return $isValid if $isValid;
 		}
 
-		push @failures, "* Value(s) '" . JSON::encode_json($value) . "' did not meet validation(s) '" . join("', '", @$validation) . "'";
+		my $displayValue = ref $value ? JSON::encode_json($value) : $value;
+		push @failures, "* Value(s) '" . $displayValue . "' did not meet validation(s) '" . join("', '", @$validation) . "'";
 
 		$top = $prev_top;
 		return $isValid;
