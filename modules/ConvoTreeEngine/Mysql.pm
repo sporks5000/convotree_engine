@@ -115,7 +115,7 @@ sub doQuery {
 	}
 	my $bits = shift || [];
 
-	while (1) {
+	for (1 .. 3) {
 		eval {
 			if ($code) {
 				$code->();
@@ -167,7 +167,7 @@ sub createTables {
 			require ConvoTreeEngine::ElementExamples;
 			my $query = qq/INSERT IGNORE INTO ${prefix}c_element_types (type, example) VALUES /;
 			my @bits;
-			foreach my $type (qw/item note raw enter exit if assess varaible choice display do data negate stop/) {
+			foreach my $type (keys %ConvoTreeEngine::ElementExamples::examples) {
 				my $example = $ConvoTreeEngine::ElementExamples::examples{$type};
 				$example = JSON::encode_json($example);
 				push @bits, $type, $example;
@@ -182,7 +182,7 @@ sub createTables {
 			### The table containing elements
 			$class->doQuery(qq/
 				CREATE TABLE IF NOT EXISTS ${prefix}element (
-					id INT AUTO_INCREMENT PRIMARY KEY,
+					id BIGINT AUTO_INCREMENT PRIMARY KEY,
 					type VARCHAR(15) NOT NULL,
 					name VARCHAR(256),
 					category VARCHAR(50),
@@ -201,17 +201,19 @@ sub createTables {
 		}
 
 		unless ($tableHash{"${prefix}nested_element"}) {
-			### Certain element types have the ability to branch into different paths. This keeps track of those
+			### Certain element types have the ability to net other elements. This keeps track of those
 			$class->doQuery(qq/
 				CREATE TABLE IF NOT EXISTS ${prefix}nested_element (
-					element_id INT NOT NULL,
-					nested_element_id INT NOT NULL,
+					element_id BIGINT NOT NULL,
+					nested_element_id BIGINT NOT NULL,
+					PRIMARY KEY(
+						element_id,
+						nested_element_id
+					),
 					INDEX ${prefix}nested_element_to_element_id_index
 						(element_id) USING BTREE,
-					INDEX ${prefix}nested_element_to nested_element_id_index
+					INDEX ${prefix}nested_element_to_nested_element_id_index
 						(nested_element_id) USING BTREE,
-					PRIMARY KEY
-						(element_id, nested_element_id)
 					FOREIGN KEY (element_id)
 						REFERENCES ${prefix}element(id)
 						ON DELETE CASCADE
