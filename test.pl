@@ -13,9 +13,12 @@ BEGIN {
 use strict;
 use warnings;
 
+use Data::Dumper;
+
 use ConvoTreeEngine::Exceptions;
 use ConvoTreeEngine::Mysql;
 use ConvoTreeEngine::Object::Element;
+use ConvoTreeEngine::Object::Element::Nested;
 
 ### Initialize a connection and then remove the test tables if they exist
 my $dbHandler = ConvoTreeEngine::Mysql->getConnection;
@@ -29,7 +32,7 @@ $dbHandler = ConvoTreeEngine::Mysql->getConnection;
 #== Element Validation ==#
 #========================#
 
-ConvoTreeEngine::Object::Element->create({
+my $element = ConvoTreeEngine::Object::Element->create({
 	type => 'raw',
 	json => {
 		html => 'Some text',
@@ -53,3 +56,16 @@ foreach my $row (sort {$a->{type} cmp $b->{type}} @$rows) {
 		$ex->rethrow;
 	}
 }
+
+$element->delete;
+
+my $ne_table = ConvoTreeEngine::Object::Element::Nested->_table;
+
+$rows = ConvoTreeEngine::Mysql->fetchRows(qq/SELECT DISTINCT(element_id) FROM $ne_table;/);
+my @ids;
+foreach my $row (@$rows) {
+	push @ids, $row->{element_id};
+}
+
+my $elements = ConvoTreeEngine::Object::Element->searchWithNested(@ids);
+print Data::Dumper::Dumper($elements);

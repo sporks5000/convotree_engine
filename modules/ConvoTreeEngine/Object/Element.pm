@@ -89,7 +89,7 @@ sub update {
 	$args->{json} = $self->_validate_json($args->{json}, $self->type) if exists $args->{json};
 
 	$self->atomic(sub {
-		$self->clearNestedElements;
+		$self->clearNestedElements unless $skip_nested;
 		$self = $self->SUPER::update($args);
 		$self->doNestedElements unless $skip_nested;
 	});
@@ -97,7 +97,66 @@ sub update {
 	return $self;
 }
 
-### Uses "search" and "delete" from the base class
+sub delete {
+	my $self = shift;
+
+	my $response;
+	$self->atomic(sub {
+		$self->sanitizeNesting;
+		$response = $self->SUPER::delete;
+	});
+
+	return $response;
+}
+
+### Uses "search" from the base class
+
+sub searchWithNested {
+	my $invocant = shift;
+	my @ids      = @_;
+
+	my $string;
+	my @bits;
+	foreach my $id (@ids) {
+		$string .= '?,';
+		push @bits, $id;
+	}
+	$string = substr($string, 0, -1);
+
+	require ConvoTreeEngine::Object::Element::Nested;
+	my $e_table  = $invocant->_table;
+	my $ne_table = ConvoTreeEngine::Object::Element::Nested->_table;
+	my $rows = ConvoTreeEngine::Mysql->fetchRows(qq/
+		SELECT e.id AS e_id, e.type AS e_type, e.name AS e_name, e.category AS e_category, e.json AS e_json,
+			ne.element_id, ne.nested_element_id,
+			e2.id AS e2_id, e2.type AS e2_type, e2.name AS e2_name, e2.category AS e2_category, e2.json AS e2_json
+		FROM $e_table e
+		LEFT JOIN $ne_table ne ON e.id = ne.element_id
+		LEFT JOIN $e_table e2 ON ne.nested_element_id = e2.id
+		WHERE e.id IN ($string);
+	/, \@bits);
+
+	my %elements;
+	foreach my $row (@$rows) {
+		$elements{$row->{e_id}} ||= $invocant->promote({
+			id       => $row->{e_id},
+			type     => $row->{e_type},
+			name     => $row->{e_name},
+			category => $row->{e_category},
+			json     => $row->{e_json},
+		});
+		$elements{$row->{e2_id}} ||= $invocant->promote({
+			id       => $row->{e2_id},
+			type     => $row->{e2_type},
+			name     => $row->{e2_name},
+			category => $row->{e2_category},
+			json     => $row->{e2_json},
+		});
+	}
+
+	return values %elements if wantarray;
+	return \%elements;
+}
 
 #================#
 #== Validation ==#
@@ -598,6 +657,80 @@ sub clearNestedElements {
 	/, [$self->id]);
 
 	return;
+}
+
+sub sanitizeNesting {
+	my $self = shift;
+
+	require ConvoTreeEngine::Object::Element::Nested;
+	my $e_table  = $self->_table;
+	my $ne_table = ConvoTreeEngine::Object::Element::Nested->_table;
+	my $rows = ConvoTreeEngine::Mysql->fetchRows(qq/
+		SELECT e.id, e.type, e.name, e.category, e.json FROM $ne_table ne
+		JOIN $e_table e ON ne.element_id = e.id
+		WHERE ne.nested_element_id = ?;
+	/, [$self->id]);
+
+	return unless @$rows;
+
+	foreach my $row (@$rows) {
+		my $type    = $row->{type};
+		my $element = $self->promote($row);
+		my $jsonRef = $element->jsonRef;
+
+		if ($type eq 'if') {
+			foreach my $cond (@{$jsonRef->{cond}}) {
+				if (@$cond > 1) {
+					$cond->[1] = $element->_sanitize_nesting_arrays($cond->[1], $self->id);
+				}
+			}
+		}
+		elsif ($type eq 'assess') {
+			if (@{$jsonRef->{cond}} > 1) {
+				$jsonRef->{cond}[1] = $element->_sanitize_nesting_arrays($jsonRef->{cond}[1], $self->id);
+			}
+		}
+		elsif ($type eq 'choice') {
+			foreach my $choice (@{$jsonRef->{choices}}) {
+				if (@$choice > 2) {
+					$choice->[2] = $element->_sanitize_nesting_arrays($choice->[2], $self->id);
+				}
+			}
+		}
+		elsif ($type eq 'series') {
+			$jsonRef->{series} = $element->_sanitize_nesting_arrays($jsonRef->{series}, $self->id);
+		}
+
+		$element->update({json => $jsonRef, skip_nested => 1});
+	}
+
+	ConvoTreeEngine::Mysql->doQuery(qq/
+		DELETE FROM $ne_table
+		WHERE nested_element_id = ?;
+	/, [$self->id]);
+
+	return;
+}
+
+sub _sanitize_nesting_arrays {
+	my $self         = shift;
+	my $nestingBlock = shift;
+	my $to_remove    = shift;
+
+	my @elements;
+	if (ref $nestingBlock) {
+		foreach my $id (@$nestingBlock) {
+			push @elements, $id unless $id == $to_remove;
+		}
+	}
+	else {
+		unless ($nestingBlock == $to_remove) {
+			push @elements, $nestingBlock;
+		}
+	}
+
+	return $elements[0] if scalar(@elements) == 1;
+	return \@elements;
 }
 
 #===========================#

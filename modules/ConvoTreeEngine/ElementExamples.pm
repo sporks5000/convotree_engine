@@ -225,7 +225,7 @@ our %examples = (
 		},
 	},
 	series => {
-		series => [1,2,3],
+		series => [1,2,3,5],
 		arbit  => {
 			"Additional details" => {
 				"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
