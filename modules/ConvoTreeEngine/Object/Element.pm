@@ -86,7 +86,12 @@ sub update {
 	my $args = $self->_prep_args(@_);
 
 	my $skip_nested = delete $args->{skip_nested};
-	$args->{json} = $self->_validate_json($args->{json}, $self->type) if exists $args->{json};
+	if (exists $args->{json}) {
+		$args->{json} = $self->_validate_json($args->{json}, $self->type);
+	}
+	else {
+		$skip_nested = 1;
+	}
 
 	$self->atomic(sub {
 		$self->clearNestedElements unless $skip_nested;
@@ -113,7 +118,15 @@ sub delete {
 
 sub searchWithNested {
 	my $invocant = shift;
-	my @ids      = @_;
+	my $id       = shift;
+
+	my @ids;
+	if ((ref $id || '') eq 'ARRAY') {
+		@ids = @$id;
+	}
+	else {
+		@ids = ($id, @_);
+	}
 
 	my $string;
 	my @bits;
@@ -249,7 +262,7 @@ sub searchWithNested {
 		return 0 if defined $value->[0] && !$class->_validate_value($value->[0], 'words');
 		### The second element must be undefined, or a string, or another item block
 		if (defined $value->[1]) {
-			return 0 unless $class->_validate_value($value->[1], ['string', 'itemBlock']);
+			return 0 unless $class->_validate_value($value->[1], ['string', 'arrayOf(itemBlock)']);
 			### If it is defined, there cannot be a third element
 			return 0 unless @$value == 2;
 		}

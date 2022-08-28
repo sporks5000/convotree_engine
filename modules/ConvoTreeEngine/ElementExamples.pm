@@ -13,9 +13,16 @@ our %examples = (
 				'Span text',
 			],
 			[
-				'span classes',[
-					'nested span classes',
-					'Spans can be nested as deeply as desired'
+				'span classes',
+				[
+					[
+						'nested span classes',
+						'Spans can be nested...'
+					],
+					[
+						'nested span classes',
+						'...as deeply as desired'
+					],
 				],
 			],
 			[

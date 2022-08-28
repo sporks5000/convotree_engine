@@ -12,7 +12,7 @@ use JSON;
 
 use ConvoTreeEngine::Exceptions;
 use ConvoTreeEngine::Mysql;
-use ConvoTreeEngine::Object::Element; ##### TODO: Temporary
+use ConvoTreeEngine::Object::Element;
 
 my $connection_exception;
 eval {
@@ -42,46 +42,35 @@ my $app = sub {
 		my $body = eval {
 			JSON::decode_json($request->raw_body || '{}');
 		} || {};
-		$response = $request->request_uri . ": ";
-		if ($body->{pid}) {
-			$response .= $$;
+		my $uri = $request->request_uri;
+
+		if ($uri =~ m@/element/create/?@i) {
+			my $element = ConvoTreeEngine::Object::Element->create($body);
+			$response = $element->asHashRef;
+		}
+		elsif ($uri =~ m@/element/update/?@i) {
+			my $id = delete $body->{id};
+			my $element = ConvoTreeEngine::Object::Element->findOrDie({id => $id});
+			$element->update($body);
+			return $element->asHashRef;
+		}
+		elsif ($uri =~ m@/element/delete/?@i) {
+			my $id = delete $body->{id};
+			my $element = ConvoTreeEngine::Object::Element->findOrDie({id => $id});
+			$element->delete;
+			return {deleted => 1};
+		}
+		elsif ($uri =~ m@/element/get/?@i) {
+			my $ids = $body->{id} || $body->{ids};
+			my $elements = ConvoTreeEngine::Object::Element->searchWithNested($ids);
+			return $elements;
 		}
 		else {
-			my $name = $body->{name} || $request->raw_body;
-			$response .= "Hello $name\n";
-		}
-
-##### TODO: Temporary
-
-		my $element = ConvoTreeEngine::Object::Element->find({id => 1});
-		if ($element) {
-			if ($element->name eq 'FISHES') {
-				$element->update({
-					json => {html => '<div>Raw Hotdogs</div>'},
-					name => 'HOTDOGS',
-				});
-			}
-			else {
-				$element->update({
-					json => {html => '<div>Raw Fishes</div>'},
-					name => 'FISHES',
-				});
-			}
-		}
-		else {
-			$element = ConvoTreeEngine::Object::Element->create({
-				type => 'raw',
-				name => 'CARL',
-				json => {html => '<div>A delicious taco</div>'},
-			});
-		}
-
-		$response = JSON::encode_json([
-			$element->asHashRef,
-		]);
-
-##### TODO: End temporary
-
+			ConvoTreeEngine::Exception::Input->throw(
+				error => "API endpoint not found: '$uri'",
+				code  => 404,
+			);
+		};
 	};
 	if (my $ex = $@) {
 		ConvoTreeEngine::Exception::Unexpected->promote($ex);
