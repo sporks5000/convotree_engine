@@ -56,14 +56,12 @@ sub create {
 	return $self;
 }
 
-sub search {
-	##### TODO: This
-}
-
 sub update {
 	my $self = shift;
 
-	##### TODO: Throw an exception
+	ConvoTreeEngine::Exception::Internal->throw(
+		error => 'Nested Elements cannot be updated',
+	);
 }
 
 sub delete {

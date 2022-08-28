@@ -120,11 +120,11 @@ our %examples = (
 		},
 	},
 	negate   => {
-		assess_id => "1",
+		assess_id => "2",
 		arbit     => {
 			"Additional details" => {
 				"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
-				"2" => 'The "assess_id" will contain the ID of an "assess" block. This negate block will remove the specified assess block from the assess queue',
+				"2" => 'The "assess_id" will contain the ID of an "assess" block or an array with multiple IDs of assess blocks. This negate block will remove the specified assess block from the assess queue',
 			},
 		},
 	},

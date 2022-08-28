@@ -89,8 +89,8 @@ sub update {
 	$args->{json} = $self->_validate_json($args->{json}, $self->type) if exists $args->{json};
 
 	$self->atomic(sub {
+		$self->clearNestedElements;
 		$self = $self->SUPER::update($args);
-
 		$self->doNestedElements unless $skip_nested;
 	});
 
@@ -355,7 +355,7 @@ sub update {
 			arbit => [0, 'ignore'],
 		},
 		negate   => {
-			assess_id => [1, 'positiveInt'],
+			assess_id => [1, ['arrayOf(positiveInt)', 'positiveInt']],
 			arbit     => [0, 'ignore'],
 		},
 		stop     => {
@@ -477,12 +477,125 @@ sub update {
 #== Other Methods ==#
 #===================#
 
+sub listReferencedElements {
+	my $self          = shift;
+	my $verify_exists = shift;
+
+	my $jsonRef = $self->jsonRef;
+	my $type    = $self->type;
+
+	my @elements;
+	if ($type eq 'if') {
+		foreach my $cond (@{$jsonRef->{cond}}) {
+			if (@$cond > 1) {
+				if (ref $cond->[1]) {
+					push @elements, @{$cond->[1]};
+				}
+				else {
+					push @elements, $cond->[1];
+				}
+			}
+		}
+	}
+	elsif ($type eq 'assess') {
+		if (@{$jsonRef->{cond}} > 1) {
+			if (ref $jsonRef->{cond}[1]) {
+				push @elements, @{$jsonRef->{cond}[1]};
+			}
+			else {
+				push @elements, $jsonRef->{cond}[1];
+			}
+		}
+	}
+	elsif ($type eq 'negate') {
+		if (ref $jsonRef->{assess_id}) {
+			push @elements, @{$jsonRef->{assess_id}};
+		}
+		else {
+			push @elements, $jsonRef->{assess_id};
+		}
+	}
+	elsif ($type eq 'choice') {
+		foreach my $choice (@{$jsonRef->{choices}}) {
+			if (@$choice > 2) {
+				if (ref $choice->[2]) {
+					push @elements, @{$choice->[2]};
+				}
+				else {
+					push @elements, $choice->[2];
+				}
+			}
+		}
+	}
+	elsif ($type eq 'data') {
+		if (ref $jsonRef->{get}) {
+			push @elements, @{$jsonRef->{get}};
+		}
+		else {
+			push @elements, $jsonRef->{get};
+		}
+	}
+	elsif ($type eq 'series') {
+		if (ref $jsonRef->{series}) {
+			push @elements, @{$jsonRef->{series}};
+		}
+		else {
+			push @elements, $jsonRef->{series};
+		}
+	}
+
+	my %elements = map {$_ => 1} @elements;
+	@elements = keys %elements;
+
+	if ($verify_exists) {
+		if ($type eq 'negate') {
+			foreach my $id (@elements) {
+				ConvoTreeEngine::Object::Element->findOrDie({id => $id, type => 'assess'});
+			}
+		}
+		else {
+			foreach my $id (@elements) {
+				ConvoTreeEngine::Object::Element->findOrDie({id => $id});
+			}
+		}
+	}
+
+	return @elements;
+}
+
 sub doNestedElements {
 	my $self = shift;
 
-	my $jsonRef = $self->jsonRef;
+	if (my @elements = $self->listReferencedElements(1)) {
+		my $type = $self->type;
+		if ($type eq 'if' || $type eq 'assess' || $type eq 'choice' || $type eq 'series') {
+			my $my_id = $self->id;
+			require ConvoTreeEngine::Object::Element::Nested;
+			my $table = ConvoTreeEngine::Object::Element::Nested->_table();
+			my $query = qq/INSERT INTO $table (element_id, nested_element_id) VALUES/;
+			my @bits;
 
-	##### TODO: This
+			foreach my $id (@elements) {
+				push @bits, $my_id, $id;
+				$query .= '(?,?),'
+			}
+
+			$query = substr($query, 0, -1);
+			ConvoTreeEngine::Mysql->doQuery($query, \@bits);
+		}
+	}
+
+	return;
+}
+
+sub clearNestedElements {
+	my $self = shift;
+
+	require ConvoTreeEngine::Object::Element::Nested;
+	my $table = ConvoTreeEngine::Object::Element::Nested->_table();
+	ConvoTreeEngine::Mysql->doQuery(qq/
+		DELETE FROM $table WHERE element_id = ?;
+	/, [$self->id]);
 
 	return;
 }
