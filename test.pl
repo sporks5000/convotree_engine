@@ -15,8 +15,8 @@ use warnings;
 
 use ConvoTreeEngine::Exceptions;
 use ConvoTreeEngine::Mysql;
-use ConvoTreeEngine::Object::Element; ##### TODO: Temporary
-use ConvoTreeEngine::Object::Series; ##### TODO: Temporary
+use ConvoTreeEngine::Object::Element;
+use ConvoTreeEngine::Object::Series;
 
 ### Initialize a connection and then remove the test tables if they exist
 my $dbHandler = ConvoTreeEngine::Mysql->getConnection;
@@ -29,6 +29,18 @@ $dbHandler = ConvoTreeEngine::Mysql->getConnection;
 #========================#
 #== Element Validation ==#
 #========================#
+
+ConvoTreeEngine::Object::Element->create({
+	type => 'raw',
+	json => {
+		html => 'Some text',
+	},
+});
+ConvoTreeEngine::Object::Series->create({
+	name     => 'series test 1',
+	category => 'series test',
+	sequence => [1],
+});
 
 my $prefix = $ConvoTreeEngine::Config::tablePrefix;
 my $rows = ConvoTreeEngine::Mysql->fetchRows(qq/SELECT * FROM ${prefix}c_element_types/);

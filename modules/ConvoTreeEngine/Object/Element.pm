@@ -163,11 +163,11 @@ sub update {
 		return 1;
 	};
 	my $string = sub {
-		### returns true if the value is a text string
+		### returns true if the value is a text string (which may be empty)
 		my ($class, $value) = @_;
+		return 0 if !defined $value;
 		return 0 if ref $value;
-		return 1 if defined $value && length $value;
-		return 0;
+		return 1;
 	};
 	my $positiveInt = sub {
 		### Returns true if the value looks like a positive integer
@@ -201,19 +201,22 @@ sub update {
 		return 0 if $value !~ m/^(series)?[0-9]+\z/i;
 		return 1;
 	};
-	my $itemBlock; $itemBlock = sub {
+	my $itemBlock = sub {
 		my ($class, $value) = @_;
 		return 0 unless $class->_validate_value($value, 'array');
 		### The first element will either be undefined or a string of words
-		return 0 if defined $value->[0] && $class->_validate_value($value->[0], 'words');
+		return 0 if defined $value->[0] && !$class->_validate_value($value->[0], 'words');
 		### The second element must be undefined, or a string, or another item block
-		return 0 if defined $value->[1] && !$class->_validate_value($value->[1], 'string') && !$class->_validate_value($value->[0], 'itemBlock');
-		### If the second element is undefined, the third element must be a single word (representing a variable name)
-		### Otherwise, there must be no third element
-		return 0 if defined $value->[1] && @$value > 2;
-		return 0 if !defined $value->[1] && !defined $value->[2];
-		return 0 if defined $value->[2] && !$class->_validate_value($value->[2], 'variableName');
-		return 0 if @$value > 3;
+		if (defined $value->[1]) {
+			return 0 unless $class->_validate_value($value->[1], ['string', 'itemBlock']);
+			### If it is defined, there cannot be a third element
+			return 0 unless @$value == 2;
+		}
+		else {
+			### If the second element is undefined, the third must match the validation for a variable name
+			return 0 unless @$value == 3;
+			return 0 unless $class->_validate_value($value->[2], 'variableName');
+		}
 		return 1;
 	};
 	my $item = sub {
@@ -314,9 +317,8 @@ sub update {
 		return 0 unless $class->_validate_value($value, 'hash');
 		foreach my $key (keys %$value) {
 			return 0 unless $class->_validate_value($key, 'variableName');
-			return 0 unless !defined $value->{$key};
-			return 0 unless $class->_validate_value($value->{$key}, 'string');
-			return 0 if $value->{$key} =~ m/^[+*\/-]=/ && !$class->_validate_value(substr($value->{$key}, 2), 'number');
+			return 0 unless $class->_validate_value($value->{$key}, ['string', 'undefined']);
+			return 0 if $value->{$key} =~ m/^[+\*\/-]=/ && !$class->_validate_value(substr($value->{$key}, 2), 'number');
 		}
 		return 1;
 	};
@@ -352,6 +354,7 @@ sub update {
 		positiveInt     => $positiveInt,
 		number          => $number,
 		pathIdent       => $pathIdent,
+		elementString   => $elementString,
 		itemBlock       => $itemBlock,
 		item            => $item,
 		singleElement   => $singleElement,
@@ -456,7 +459,7 @@ sub update {
 	}
 
 	my @failures;
-	my $top = 1;
+	my $nested = 0;
 	sub _validate_value {
 		my $invocant   = shift;
 		my $value      = shift;
@@ -465,11 +468,10 @@ sub update {
 
 		my $class = ref $invocant || $invocant;
 
-		my $prev_top = $top;
-		if ($top == 1) {
+		if ($nested == 0) {
 			@failures = ();
 		}
-		$top = 0;
+		$nested++;
 
 		$validation = [$validation] unless ref $validation;
 		unshift @additional, $value;
@@ -481,13 +483,16 @@ sub update {
 			) unless $validations{$v};
 
 			$isValid = $validations{$v}->($class, @additional);
-			return $isValid if $isValid;
+			if ($isValid) {
+				$nested--;
+				return $isValid;
+			}
 		}
 
 		my $displayValue = ref $value ? JSON::encode_json($value) : $value;
 		push @failures, "* Value(s) '" . $displayValue . "' did not meet validation(s) '" . join("', '", @$validation) . "'";
 
-		$top = $prev_top;
+		$nested--;
 		return $isValid;
 	}
 

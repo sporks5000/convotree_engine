@@ -133,7 +133,7 @@ sub createParts {
 				$ref = 'ConvoTreeEngine::Object::Series';
 				$part = $ref->findOrDie({id => $series_id});
 			}
-			elsif ($part =~ m/^[0-9]+\s/) {
+			elsif ($part =~ m/^[0-9]+\z/) {
 				$ref = 'ConvoTreeEngine::Object::Element';
 				$part = $ref->findOrDie({id => $part});
 			}
