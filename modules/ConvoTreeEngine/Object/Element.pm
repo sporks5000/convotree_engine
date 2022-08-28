@@ -185,22 +185,6 @@ sub update {
 		return 0 if $value !~ m/^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z/;
 		return 1;
 	},
-	my $pathIdent = sub {
-		### Returns true if the value looks like a an identifier for a path or a series
-		my ($class, $value) = @_;
-		return 0 if !defined $value;
-		return 0 if ref $value;
-		return 0 if $value !~ m/^(path|series)[0-9]+\z/i;
-		return 1;
-	};
-	my $elementString = sub {
-		### Returns true if the value looks like a an identifier for a series or element
-		my ($class, $value) = @_;
-		return 0 if !defined $value;
-		return 0 if ref $value;
-		return 0 if $value !~ m/^(series)?[0-9]+\z/i;
-		return 1;
-	};
 	my $itemBlock = sub {
 		my ($class, $value) = @_;
 		return 0 unless $class->_validate_value($value, 'array');
@@ -219,15 +203,6 @@ sub update {
 		}
 		return 1;
 	};
-	my $item = sub {
-		### The value must be an array of arrays
-		my ($class, $value) = @_;
-		return 0 unless $class->_validate_value($value, 'array');
-		foreach my $deep (@$value) {
-			return 0 unless $class->_validate_value($deep, 'itemBlock');
-		}
-		return 1;
-	};
 	my $singleElement = sub {
 		### Return true if the valus has the structure of a single element
 		my ($class, $value, $type) = @_;
@@ -243,22 +218,9 @@ sub update {
 			next unless $typeValidation{$type}{$key}[0] && exists $value->{$key};
 			return 0 if !exists $value->{$key};
 			### Make sure it passes validation for that element type
-			return 0 unless $class->_validate_value($value->{$key}, $typeValidation{$type}{$key}[1]);
-		}
-		return 1;
-	};
-	my $elementStrings = sub {
-		### An array of element strings, or a single element string
-		my ($class, $value) = @_;
-		return 0 unless defined $value;
-		my $ref = ref $value || '';
-		if ($ref eq 'ARRAY') {
-			foreach my $element (@$value) {
-				return 0 unless $class->_validate_value($element, 'elementString');
-			}
-		}
-		else {
-			return 0 unless $class->_validate_value($value, 'elementString');
+			my @args = ($value->{$key}, $typeValidation{$type}{$key}[1]);
+			push @args, $typeValidation{$type}{$key}[2] if scalar @{$typeValidation{$type}{$key}} > 2;
+			return 0 unless $class->_validate_value(@args);
 		}
 		return 1;
 	};
@@ -299,16 +261,7 @@ sub update {
 		return 0 if @$value > 2;
 		return 1 unless @$value == 2;
 		### If the second element is present, it should be a path identifier
-		return 0 unless $class->_validate_value($value->[1], 'pathIdent');
-		return 1;
-	};
-	my $ifConditions = sub {
-		### The value must be an array of arrays
-		my ($class, $value) = @_;
-		return 0 unless $class->_validate_value($value, 'array');
-		foreach my $deep (@$value) {
-			return 0 unless $class->_validate_value($deep, 'singleCondition');
-		}
+		return 0 unless $class->_validate_value($value->[1], ['arrayOf(positiveInt)', 'positiveInt']);
 		return 1;
 	};
 	my $variableUpdates = sub {
@@ -322,21 +275,25 @@ sub update {
 		}
 		return 1;
 	};
-	my $choices = sub {
-		### The value must be an array of arrays
+	my $choice = sub {
 		my ($class, $value) = @_;
+		return 0 unless defined $value;
 		return 0 unless $class->_validate_value($value, 'array');
+		### The first element will be a condition string
+		return 0 unless $class->_validate_value($value->[0], 'conditionString');
+		### The second element will be what we display for the choice
+		return 0 unless $class->_validate_value($value->[1], 'string');
+		next if @$value == 2;
+		return 0 if @$value > 3;
+		### If there is a third element, it should be a path identifier
+		return 0 unless $class->_validate_value($value->[2], ['arrayOf(positiveInt)', 'positiveInt']);
+	};
+	my $arrayOf = sub {
+		my ($class, $value, @patterns) = @_;
+		return 0 unless $class->_validate_value($value, 'array');
+		return 0 unless @patterns;
 		foreach my $deep (@$value) {
-			return 0 unless defined $deep;
-			return 0 unless $class->_validate_value($deep, 'array');
-			### The first element will be a condition string
-			return 0 unless $class->_validate_value($deep->[0], 'conditionString');
-			### The second element will be what we display for the choice
-			return 0 unless $class->_validate_value($deep->[1], 'string');
-			next if @$deep == 2;
-			return 0 if @$deep > 3;
-			### If there is a third element, it should be a path identifier
-			return 0 unless $class->_validate_value($deep->[2], 'pathIdent');
+			return 0 unless $class->_validate_value($deep, \@patterns);
 		}
 		return 1;
 	};
@@ -353,24 +310,20 @@ sub update {
 		string          => $string,
 		positiveInt     => $positiveInt,
 		number          => $number,
-		pathIdent       => $pathIdent,
-		elementString   => $elementString,
 		itemBlock       => $itemBlock,
-		item            => $item,
 		singleElement   => $singleElement,
-		elementStrings  => $elementStrings,
 		conditionString => $conditionString,
 		singleCondition => $singleCondition,
-		ifConditions    => $ifConditions,
 		variableUpdates => $variableUpdates,
-		choices         => $choices,
+		choice          => $choice,
 	);
 
 	%typeValidation = (
 		item     => {
-			text   => [1, 'item'],
+			text   => [1, 'arrayOf(itemBlock)'],
 			delay  => [0, 'positiveInt'],
 			prompt => [0, 'boolean'],
+			stop   => [0, 'boolean'],
 			arbit  => [0, 'ignore'],
 		},
 		note     => {
@@ -381,6 +334,7 @@ sub update {
 			html   => [1, 'string'],
 			delay  => [0, 'positiveInt'],
 			prompt => [0, 'boolean'],
+			stop   => [0, 'boolean'],
 			arbit  => [0, 'ignore'],
 		},
 		enter    => {
@@ -395,7 +349,7 @@ sub update {
 			arbit => [0, 'ignore'],
 		},
 		if       => {
-			cond  => [1, 'ifConditions'],
+			cond  => [1, 'arrayOf(singleCondition)'],
 			arbit => [0, 'ignore'],
 		},
 		assess   => {
@@ -414,24 +368,30 @@ sub update {
 			arbit  => [0, 'ignore'],
 		},
 		choice   => {
-			choices => [1, 'choices'],
+			choices => [1, 'arrayOf(choice)'],
 			arbit   => [0, 'ignore'],
 		},
 		display  => {
 			disp  => [1, 'hash'],
 			delay => [0, 'positiveInt'],
+			stop  => [0, 'boolean'],
 			arbit => [0, 'ignore'],
 		},
 		do       => {
 			function => [1, 'word'],
 			args     => [0, 'array'],
 			delay    => [0, 'positiveInt'],
+			stop     => [0, 'boolean'],
 			arbit    => [0, 'ignore'],
 
 		},
 		data     => {
-			get   => [1, 'elementStrings'],
+			get   => [1, ['arrayOf(positiveInt)', 'positiveInt']],
 			arbit => [0, 'ignore'],
+		},
+		series   => {
+			series => [1, ['arrayOf(positiveInt)', 'positiveInt']],
+			arbit  => [0, 'ignore'],
 		},
 	);
 
@@ -478,11 +438,23 @@ sub update {
 
 		my $isValid;
 		foreach my $v (@$validation) {
-			ConvoTreeEngine::Exception::Input->throw(
-				error => "Validation '$v' does not exist",
-			) unless $validations{$v};
+			if ($v =~ m/^arrayOf\((.*)\)\z/) {
+				my $patterns = $1;
+				my @patterns = split m/\s*,\s*/, $patterns;
+				foreach my $pattern (@patterns) {
+					ConvoTreeEngine::Exception::Input->throw(
+						error => "Validation '$pattern' does not exist",
+					) unless $validations{$pattern};
+				}
+				$isValid = $arrayOf->($class, $value, @patterns);
+			}
+			else {
+				ConvoTreeEngine::Exception::Input->throw(
+					error => "Validation '$v' does not exist",
+				) unless $validations{$v};
 
-			$isValid = $validations{$v}->($class, @additional);
+				$isValid = $validations{$v}->($class, @additional);
+			}
 			if ($isValid) {
 				$nested--;
 				return $isValid;

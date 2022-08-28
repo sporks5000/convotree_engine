@@ -44,7 +44,7 @@ ConvoTreeEngine::Object::Series->create({
 
 my $prefix = $ConvoTreeEngine::Config::tablePrefix;
 my $rows = ConvoTreeEngine::Mysql->fetchRows(qq/SELECT * FROM ${prefix}c_element_types/);
-foreach my $row (@$rows) {
+foreach my $row (sort {$a->{type} cmp $b->{type}} @$rows) {
 	eval {
 		ConvoTreeEngine::Object::Element->create({
 			type     => $row->{type},

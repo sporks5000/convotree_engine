@@ -153,7 +153,6 @@ sub createParts {
 				nested_series_id => $part->id,
 				sequence         => $sequence,
 			};
-			@pieces = ConvoTreeEngine::Object::Series::ToElement->search({series_id => $part->id});
 		}
 		else {
 			$elements{$part->id} = {
@@ -166,18 +165,8 @@ sub createParts {
 			foreach my $path (values %$paths) {
 				push @pieces, ConvoTreeEngine::Object::Series::ToElement->search({series_id => $path->series_id});
 			}
-		}
 
-		foreach my $piece (@pieces) {
-			if ($piece->isElement) {
-				$elements{$piece->id} ||= {
-					series_id        => $self->id,
-					element_id       => undef,
-					nested_series_id => $piece->id,
-					sequence         => undef,
-				};
-			}
-			else {
+			foreach my $piece (@pieces) {
 				$series{$piece->id} ||= {
 					series_id        => $self->id,
 					element_id       => $piece->id,
@@ -189,6 +178,33 @@ sub createParts {
 	}
 
 	return ConvoTreeEngine::Object::Series::ToElement->createMany(values(%elements), values(%series))
+}
+
+sub sequence {
+	my $self = shift;
+
+	my $ste_table = ConvoTreeEngine::Object::Series::ToElement->_table;
+	my $e_table   = ConvoTreeEngine::Object::Element->_table;
+	my $s_table   = $self->_table;
+
+	my $query = qq/
+		SELECT ste.series_id AS ste_series_id, ste.element_id AS ste_element_id, ste.nested_series_id AS ste_nested_series_id, ste.sequence AS ste_sequence,
+			e.id AS e_id, e.type AS e_type, e.name AS e_name, e.category AS e_category, e.json AS e_json,
+			s.id AS s_id, s.name AS s_name, s.category AS s_category,
+			ste2.series_id AS ste2_series_id, ste2.element_id AS ste2_element_id, ste2.nested_series_id AS ste2_nested_series_id, ste2.sequence AS set2_sequence,
+			e2.id AS e2_id, e2.type AS e2_type, e2.name AS e2_name, e2.category AS e2_category, e2.json AS e2_json
+		FROM $ste_table ste
+		LEFT JOIN $e_table e ON ste.element_id = e.id
+		LEFT JOIN $s_table s ON ste.nested_series_id = s.id
+		LEFT JOIN $ste_table ste2 on s.id = ste2.series_id
+		LEFT JOIN $e_table e2 ON ste2.element_id = e2.id
+		WHERE ste.series_id = ?
+		ORDER BY ste.sequence, ste2.sequence;
+	/;
+
+	my $rows = ConvoTreeEngine::Mysql->fetchRows($query, [$self->id]);
+
+	##### TODO: what ever this is
 }
 
 #===========================#

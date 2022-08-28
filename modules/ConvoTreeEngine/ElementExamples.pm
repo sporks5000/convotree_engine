@@ -30,12 +30,14 @@ our %examples = (
 		],
 		delay  => '1000',
 		prompt => JSON::false,
+		stop   => JSON::false,
 		arbit  => {
 			"Additional details" => {
 				"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 				"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
-				"3" => 'The prompt key is optional. It contains a boolean value indicating whether to prompt before continuing',
-				"4" => 'for the text blocks, if the second string is null, a third string can include the name of a variable. the value of that variable will be displayed'
+				"3" => 'The "prompt" key is optional. It contains a boolean value indicating whether to prompt before continuing',
+				"4" => 'The "stop" key is optional. It contain a boolean value indicating whether or not the flow of elements sshould stop after this point (identical to a "stop" block)',
+				"5" => 'For the text blocks, if the second string is null, a third string can include the name of a variable. the value of that variable will be displayed'
 			},
 		},
 	},
@@ -47,11 +49,13 @@ our %examples = (
 		html   => 'A string that will be interpreted as HTML and displayed to the user',
 		delay  => 1000,
 		prompt => JSON::false,
+		stop   => JSON::false,
 		arbit  => {
 			"Additional details" => {
 				"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 				"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
-				"3" => 'The prompt key is optional. It contains a boolean value indicating whether to prompt before continuing',
+				"3" => 'The "prompt" key is optional. It contains a boolean value indicating whether to prompt before continuing',
+				"4" => 'The "stop" key is optional. It contain a boolean value indicating whether or not the flow of elements sshould stop after this point (identical to a "stop" block)',
 			},
 		},
 	},
@@ -76,7 +80,7 @@ our %examples = (
 		cond  => [
 			[
 				'var=0',
-				'series1',
+				[1,2],
 			],
 		],
 		arbit => {
@@ -89,7 +93,7 @@ our %examples = (
 				"4.b" => 'Operators may be one of the following: "=", "!=", ">", "<", ">=", "<="',
 				"4.c" => 'The value must contain only letters, numbers, and underscores',
 				"4.d" => 'If there are multiple sets within within the first string, they will be separated by and ("&") or or ("|") operators',
-				"5" => 'The second string (if present) will be a number preceeded by the word "series" or "path" (meaning that it is pointing to an element series, or an element path)',
+				"5" => 'The second string (if present) will contain either a single positive integer (representing a single element ID) or an array of positive integers',
 				"6" => 'These nested arrays will be processed in order until one of them returns true',
 				"7" => 'If the first element within a nested array is null, it will be interpreted as returning true',
 			},
@@ -98,7 +102,7 @@ our %examples = (
 	assess   => {
 		cond  => [
 			'var=0',
-			'series1',
+			'1',
 		],
 		arbit => {
 			"Additional details" => {
@@ -110,7 +114,7 @@ our %examples = (
 				"4.b" => 'Operators may be one of the following: "=", "!=", ">", "<", ">=", "<="',
 				"4.c" => 'The value must contain only letters, numbers, and underscores',
 				"4.d" => 'If there are multiple sets within within the first string, they will be separated by and ("&") or or ("|") operators',
-				"5" => 'The second string (if present) will be a number preceeded by the word "series" or "path" (meaning that it is pointing to an element series, or an element path)',
+				"5" => 'The second string (if present) willcontain either a single positive integer (representing a single element ID) or an array of positive integers',
 				"6" => 'If the first element within the array is null, it will be interpreted as returning true',
 			},
 		},
@@ -151,12 +155,12 @@ our %examples = (
 			[
 				undef,
 				'display text',
-				'SERIES1',
+				'1',
 			],
 			[
 				'var=1',
 				'display text',
-				'SERIES1',
+				[1,2],
 			],
 		],
 		arbit  => {
@@ -171,7 +175,7 @@ our %examples = (
 				"5.c" => 'The value must contain only letters, numbers, and underscores',
 				"5.d" => 'If there are multiple sets within within the first string, they will be separated by and ("&") or or ("|") operators',
 				"6" => 'The second string will contain the text to display to the user for that choice',
-				"7" => 'The third string (if present) will be a number preceeded by the word "series" or "path" (meaning that it is pointing to an element series, or an element path)',
+				"7" => 'The third string (if present) will contain either a single positive integer (representing a single element ID) or an array of positive integers',
 				"8" => 'These nested arrays will be displayed to the user in the order given',
 			},
 		},
@@ -184,12 +188,12 @@ our %examples = (
 			},
 		},
 		delay => '1000',
+		stop  => JSON::false,
 		arbit => {
 			"Additional details" => {
 				"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 				"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
-				"3" => 'The prompt key is optional. It contains a boolean value indicating whether to prompt before continuing',
-				"4" => 'for the text blocks, if the second string is null, a third string can include the name of a variable. the value of that variable will be displayed',
+				"3" => 'The "stop" key is optional. It contain a boolean value indicating whether or not the flow of elements sshould stop after this point (identical to a "stop" block)',
 			},
 		},
 	},
@@ -200,24 +204,32 @@ our %examples = (
 			'arg2',
 		],
 		delay    => '1000',
+		stop     => JSON::false,
 		arbit    => {
 			"Additional details" => {
 				"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 				"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
-				"3" => 'The function name must be a string of letters, numbers, and underscores',
-				"4" => 'The "args" key is optional; If the argument is a string beginning with "var:", it will be assumed that everything following is a variable name. The value of that variable will be used',
+				"3" => 'The "stop" key is optional. It contain a boolean value indicating whether or not the flow of elements sshould stop after this point (identical to a "stop" block)',
+				"4" => 'The function name must be a string of letters, numbers, and underscores',
+				"5" => 'The "args" key is optional; If the argument is a string beginning with "var:", it will be assumed that everything following is a variable name. The value of that variable will be used',
 			},
 		},
 	},
 	data     => {
-		get   => [
-			'SERIES1',
-			'1',
-		],
+		get   => [1,2],
 		arbit => {
 			"Additional details" => {
 				"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
-				"2" => 'The "get" key must be a number, optionally preceeded by the word "series" (meaning that it is pointing to a single element, an element series), or an array of strings each containing a number, optionally preceeded by the word "series"',
+				"2" => 'The "get" key must contain either a single positive integer (representing a single element ID) or an array of positive integers',
+			},
+		},
+	},
+	series => {
+		series => [1,2,3],
+		arbit  => {
+			"Additional details" => {
+				"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
+				"2" => 'The "series" key must contain either a single positive integer (representing a single element ID) or an array of positive integers',
 			},
 		},
 	},
