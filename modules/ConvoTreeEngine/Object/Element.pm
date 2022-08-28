@@ -7,8 +7,6 @@ use warnings;
 
 use JSON;
 
-use ConvoTreeEngine::Object::ElementPath;
-
 sub _table {
 	return shift->SUPER::_table('element');
 }
@@ -77,7 +75,7 @@ sub create {
 			json     => $args->{json},
 		});
 
-		$self->doElementPaths;
+		$self->doNestedElements;
 	});
 
 	return $self;
@@ -87,13 +85,13 @@ sub update {
 	my $self = shift;
 	my $args = $self->_prep_args(@_);
 
-	my $skip_paths = delete $args->{skip_paths};
+	my $skip_nested = delete $args->{skip_nested};
 	$args->{json} = $self->_validate_json($args->{json}, $self->type) if exists $args->{json};
 
 	$self->atomic(sub {
 		$self = $self->SUPER::update($args);
 
-		$self->doElementPaths unless $skip_paths;
+		$self->doNestedElements unless $skip_nested;
 	});
 
 	return $self;
@@ -260,7 +258,7 @@ sub update {
 		return 0 if defined $value->[0] && !$class->_validate_value($value->[0], 'conditionString');
 		return 0 if @$value > 2;
 		return 1 unless @$value == 2;
-		### If the second element is present, it should be a path identifier
+		### If the second element is present, it should be an element ID or an array of element IDs
 		return 0 unless $class->_validate_value($value->[1], ['arrayOf(positiveInt)', 'positiveInt']);
 		return 1;
 	};
@@ -285,7 +283,7 @@ sub update {
 		return 0 unless $class->_validate_value($value->[1], 'string');
 		next if @$value == 2;
 		return 0 if @$value > 3;
-		### If there is a third element, it should be a path identifier
+		### If there is a third element, it should be an element ID or an array of element IDs
 		return 0 unless $class->_validate_value($value->[2], ['arrayOf(positiveInt)', 'positiveInt']);
 	};
 	my $arrayOf = sub {
@@ -479,95 +477,14 @@ sub update {
 #== Other Methods ==#
 #===================#
 
-sub elementPaths {
-	my $self = shift;
-
-	my %paths = map {$_->id => $_} ConvoTreeEngine::Object::ElementPath->search({element_id => $self->id});
-	return \%paths;
-}
-
-sub doElementPaths {
+sub doNestedElements {
 	my $self = shift;
 
 	my $jsonRef = $self->jsonRef;
-	my $paths = $self->elementPaths;
 
-	my $doUpdate = 0;
-	my $type = $self->type;
-	if ($type eq 'if') {
-		foreach my $condition (@{$jsonRef->{cond}}) {
-			if (@$condition > 1) {
-				if (my $update = $self->_confirm_element_path($condition->[1], $paths)) {
-					$condition->[1] = $update;
-					$doUpdate = 1;
-				}
-			}
-		}
-	}
-	elsif ($type eq 'assess') {
-		my $condition = $jsonRef->{cond};
-		if (@$condition > 1) {
-			if (my $update = $self->_confirm_element_path($condition->[1], $paths)) {
-				$condition->[1] = $update;
-				$doUpdate = 1;
-			}
-		}
-	}
-	elsif ($type eq 'choice') {
-		foreach my $choice (@{$jsonRef->{choices}}) {
-			if (@$choice > 2) {
-				if (my $update = $self->_confirm_element_path($choice->[2], $paths)) {
-					$choice->[2] = $update;
-					$doUpdate = 1;
-				}
-			}
-		}
-	}
-
-	if ($doUpdate) {
-		$self->update({json => $jsonRef, skip_paths => 1});
-	}
-	if (%$paths) {
-		my $toDelete = join(', ', keys %$paths);
-		my $table = ConvoTreeEngine::Object::ElementPath->_table;
-		ConvoTreeEngine::Mysql->doQuery(
-			qq/DELETE FROM $table WHERE id IN ($toDelete);/,
-		);
-	}
+	##### TODO: This
 
 	return;
-}
-
-sub _confirm_element_path {
-	my $self    = shift;
-	my $pathVar = shift;
-	my $paths   = shift;
-
-	my $updated;
-	my $path_id;
-	if ($pathVar =~ m/^path([0-9]+)\z/i) {
-		$path_id = $1;
-		my $path = ConvoTreeEngine::Object::ElementPath->findOrDie({id => $path_id});
-		if ($path->element_id != $self->id) {
-			my %pathArgs = (element_id => $self->id, series_id => $path->series_id);
-			$path = ConvoTreeEngine::Object::ElementPath->find(\%pathArgs) || ConvoTreeEngine::Object::ElementPath->create(\%pathArgs);
-			$path_id = $path->id;
-		}
-		if ($pathVar ne "PATH$path_id") {
-			$updated = "PATH$path_id";
-		}
-	}
-	elsif ($pathVar =~ m/^series([0-9]+)\z/i) {
-		my $series_id = $1;
-		my %pathArgs = (element_id => $self->id, series_id => $series_id);
-		my $path = ConvoTreeEngine::Object::ElementPath->find(\%pathArgs) || ConvoTreeEngine::Object::ElementPath->create(\%pathArgs);
-		$path_id = $path->id;
-		$updated = "PATH$path_id";
-	}
-
-	delete $paths->{$path_id};
-
-	return $updated;
 }
 
 #===========================#

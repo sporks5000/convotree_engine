@@ -16,7 +16,6 @@ use warnings;
 use ConvoTreeEngine::Exceptions;
 use ConvoTreeEngine::Mysql;
 use ConvoTreeEngine::Object::Element;
-use ConvoTreeEngine::Object::Series;
 
 ### Initialize a connection and then remove the test tables if they exist
 my $dbHandler = ConvoTreeEngine::Mysql->getConnection;
@@ -35,11 +34,6 @@ ConvoTreeEngine::Object::Element->create({
 	json => {
 		html => 'Some text',
 	},
-});
-ConvoTreeEngine::Object::Series->create({
-	name     => 'series test 1',
-	category => 'series test',
-	sequence => [1],
 });
 
 my $prefix = $ConvoTreeEngine::Config::tablePrefix;
