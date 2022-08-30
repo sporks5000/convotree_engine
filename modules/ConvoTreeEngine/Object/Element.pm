@@ -12,7 +12,7 @@ sub _table {
 }
 
 sub _fields {
-	my @fields = qw(id type name category json);
+	my @fields = qw(id type name category namecat json);
 	return @fields if wantarray;
 	return join ', ', @fields;
 }
@@ -43,6 +43,10 @@ sub category {
 	return shift->{category};
 }
 
+sub namecat {
+	return shift->{namecat};
+}
+
 sub json {
 	return shift->{json};
 }
@@ -56,15 +60,15 @@ sub create {
 	my $args     = $invocant->_prep_args(@_);
 
 	$args->{json} = $invocant->_validate_json($args->{json}, $args->{type});
-	$args->{name} //= undef;
-	$args->{category} //= undef;
+
+	$invocant->_confirm_namecat($args);
 
 	my $table = $invocant->_table;
 	my $self;
 	$invocant->atomic(sub {
 		my $id = ConvoTreeEngine::Mysql->insertForId(
-			qq/INSERT INTO $table (type, name, category, json) VALUES(?, ?, ?, ?);/,
-			[$args->{type}, $args->{name}, $args->{category}, $args->{json}],
+			qq/INSERT INTO $table (type, name, category, namecat, json) VALUES(?, ?, ?, ?, ?);/,
+			[$args->{type}, $args->{name}, $args->{category}, $args->{namecat}, $args->{json}],
 		);
 
 		$self = $invocant->promote({
@@ -72,6 +76,7 @@ sub create {
 			type     => $args->{type},
 			name     => $args->{name},
 			category => $args->{category},
+			namecat  => $args->{namecat},
 			json     => $args->{json},
 		});
 
@@ -93,7 +98,12 @@ sub update {
 		$skip_nested = 1;
 	}
 
+	$self->_confirm_namecat($args);
+
 	$self->atomic(sub {
+		if (($self->namecat xor $args->{namecat}) || $self->namecat ne $args->{namecat}) {
+			$self->sanitizeNesting({namecat => $args->{namecat}});
+		}
 		$self->clearNestedElements unless $skip_nested;
 		$self = $self->SUPER::update($args);
 		$self->doNestedElements unless $skip_nested;
@@ -107,7 +117,7 @@ sub delete {
 
 	my $response;
 	$self->atomic(sub {
-		$self->sanitizeNesting;
+		$self->sanitizeNesting({remove => 1});
 		$response = $self->SUPER::delete;
 	});
 
@@ -128,26 +138,46 @@ sub searchWithNested {
 		@ids = ($id, @_);
 	}
 
-	my $string;
-	my @bits;
+	my $id_string;
+	my @id_bits;
+	my $namecat_string;
+	my @namecat_bits;
 	foreach my $id (@ids) {
-		$string .= '?,';
-		push @bits, $id;
+		if ($id =~ m/^[0-9]+\z/) {
+			$id_string .= '?,';
+			push @id_bits, $id;
+		}
+		else {
+			$namecat_string .= '?,';
+			push @namecat_bits, $id;
+		}
 	}
-	$string = substr($string, 0, -1);
+	$id_string = substr($id_string, 0, -1) if $id_string;
+	$namecat_string = substr($namecat_string, 0, -1) if $namecat_string;
 
 	require ConvoTreeEngine::Object::Element::Nested;
 	my $e_table  = $invocant->_table;
 	my $ne_table = ConvoTreeEngine::Object::Element::Nested->_table;
-	my $rows = ConvoTreeEngine::Mysql->fetchRows(qq/
-		SELECT e.id AS e_id, e.type AS e_type, e.name AS e_name, e.category AS e_category, e.json AS e_json,
+	my $query = qq/
+		SELECT e.id AS e_id, e.type AS e_type, e.name AS e_name, e.category AS e_category, e.namecat AS e_namecat, e.json AS e_json,
 			ne.element_id, ne.nested_element_id,
-			e2.id AS e2_id, e2.type AS e2_type, e2.name AS e2_name, e2.category AS e2_category, e2.json AS e2_json
+			e2.id AS e2_id, e2.type AS e2_type, e2.name AS e2_name, e2.category AS e2_category, e2.namecat AS e2_namecat, e2.json AS e2_json
 		FROM $e_table e
 		LEFT JOIN $ne_table ne ON e.id = ne.element_id
 		LEFT JOIN $e_table e2 ON ne.nested_element_id = e2.id
-		WHERE e.id IN ($string);
-	/, \@bits);
+		WHERE
+	/;
+	if (@id_bits) {
+		$query .= " e.id IN ($id_string)";
+		if (@namecat_bits) {
+			$query .= " OR";
+		}
+	}
+	if (@namecat_bits) {
+		$query .= " e.namecat IN ($namecat_string)";
+	}
+
+	my $rows = ConvoTreeEngine::Mysql->fetchRows($query, [@id_bits, @namecat_bits]);
 
 	my %elements;
 	foreach my $row (@$rows) {
@@ -156,6 +186,7 @@ sub searchWithNested {
 			type     => $row->{e_type},
 			name     => $row->{e_name},
 			category => $row->{e_category},
+			namecat  => $row->{e_namecat},
 			json     => $row->{e_json},
 		});
 		$elements{$row->{e2_id}} ||= $invocant->promote({
@@ -163,6 +194,7 @@ sub searchWithNested {
 			type     => $row->{e2_type},
 			name     => $row->{e2_name},
 			category => $row->{e2_category},
+			namecat  => $row->{e2_namecat},
 			json     => $row->{e2_json},
 		});
 	}
@@ -255,6 +287,20 @@ sub searchWithNested {
 		return 0 if $value !~ m/^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z/;
 		return 1;
 	},
+	my $namecat = sub {
+		### Returns true if the value looks like a namecat
+		### A namecat must validate as 'words' followed by a colon, followed by 'words'. Either instance of 'words' can instead be an empty string, but not both
+		### NOTE that while a namecat can be undefined, a undefined value DOES NOT validate as a namecat
+		my ($class, $value) = @_;
+		return 0 if !defined $value;
+		return 0 if ref $value;
+		return 0 unless $value =~ m/:/;
+		my ($cat, $name, @other) = split m/:/, $value;
+		return 0 if @other;
+		return 0 if $cat  && !$class->_validate_value($cat,  'words');
+		return 0 if $name && !$class->_validate_value($name, 'words');
+		return 1;
+	};
 	my $itemBlock = sub {
 		my ($class, $value) = @_;
 		return 0 unless $class->_validate_value($value, 'array');
@@ -331,7 +377,7 @@ sub searchWithNested {
 		return 0 if @$value > 2;
 		return 1 unless @$value == 2;
 		### If the second element is present, it should be an element ID or an array of element IDs
-		return 0 unless $class->_validate_value($value->[1], ['arrayOf(positiveInt)', 'positiveInt']);
+		return 0 unless $class->_validate_value($value->[1], ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']);
 		return 1;
 	};
 	my $variableUpdates = sub {
@@ -356,7 +402,7 @@ sub searchWithNested {
 		next if @$value == 2;
 		return 0 if @$value > 3;
 		### If there is a third element, it should be an element ID or an array of element IDs
-		return 0 unless $class->_validate_value($value->[2], ['arrayOf(positiveInt)', 'positiveInt']);
+		return 0 unless $class->_validate_value($value->[2], ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']);
 	};
 	my $arrayOf = sub {
 		my ($class, $value, @patterns) = @_;
@@ -380,6 +426,7 @@ sub searchWithNested {
 		string          => $string,
 		positiveInt     => $positiveInt,
 		number          => $number,
+		namecat         => $namecat,
 		itemBlock       => $itemBlock,
 		singleElement   => $singleElement,
 		conditionString => $conditionString,
@@ -427,7 +474,7 @@ sub searchWithNested {
 			arbit => [0, 'ignore'],
 		},
 		negate   => {
-			assess_id => [1, ['arrayOf(positiveInt)', 'positiveInt']],
+			assess_id => [1, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
 			arbit     => [0, 'ignore'],
 		},
 		stop     => {
@@ -456,11 +503,11 @@ sub searchWithNested {
 
 		},
 		data     => {
-			get   => [1, ['arrayOf(positiveInt)', 'positiveInt']],
+			get   => [1, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
 			arbit => [0, 'ignore'],
 		},
 		series   => {
-			series => [1, ['arrayOf(positiveInt)', 'positiveInt']],
+			series => [1, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
 			arbit  => [0, 'ignore'],
 		},
 	);
@@ -476,8 +523,8 @@ sub searchWithNested {
 			$json = JSON::decode_json($json);
 		}
 
-		my $success = $class->_validate_value($json, $type, 'singleElement');
-		unless ($success) {
+		my $isValid = $class->_validate_value($json, $type, 'singleElement');
+		unless ($isValid) {
 			my $failures = $class->_validation_failures;
 			ConvoTreeEngine::Exception::Input->throw(
 				error => "Validation for Element JSON did not pass:\n$failures",
@@ -549,6 +596,39 @@ sub searchWithNested {
 #== Other Methods ==#
 #===================#
 
+sub _confirm_namecat {
+	my $invocant = shift;
+	my $args     = shift;
+
+	foreach my $key (qw/name category/) {
+		if (ref $invocant) {
+			$args->{$key} //= $invocant->$key();
+		}
+		else {
+			$args->{$key} //= undef;
+		}
+		if ($args->{$key}) {
+			my $isValid = $invocant->_validate_value($args->{$key}, 'words');
+			unless ($isValid) {
+				my $failures = $invocant->_validation_failures;
+				ConvoTreeEngine::Exception::Input->throw(
+					error => "Validation for Element $key did not pass:\n$failures",
+					code  => 400,
+				);
+			}
+		}
+	}
+
+	if ($args->{name} || $args->{category}) {
+		$args->{namecat} = ($args->{category} || '') . ":" . ($args->{name} || '');
+	}
+	else {
+		$args->{namecat} = undef;
+	}
+
+	return;
+}
+
 sub listReferencedElements {
 	my $self          = shift;
 	my $verify_exists = shift;
@@ -616,17 +696,39 @@ sub listReferencedElements {
 		}
 	}
 
-	my %elements = map {$_ => 1} @elements;
-	@elements = keys %elements;
-
-	if ($verify_exists) {
-		if ($type eq 'negate') {
-			foreach my $id (@elements) {
-				ConvoTreeEngine::Object::Element->findOrDie({id => $id, type => 'assess'});
-			}
+	my %element_ids;
+	my %element_namecats;
+	foreach my $element (@elements) {
+		if ($element =~ m/^[0-9]+\z/) {
+			$element_ids{$element} = 1;
 		}
 		else {
-			foreach my $id (@elements) {
+			$element_namecats{$element} = 1;
+		}
+	}
+
+	@elements = ();
+	my %verified;
+	foreach my $namecat (keys %element_namecats) {
+		my $element;
+		if ($type eq 'negate') {
+			$element = ConvoTreeEngine::Object::Element->findOrDie({namecat => $namecat, type => 'assess'});
+		}
+		else {
+			$element = ConvoTreeEngine::Object::Element->findOrDie({namecat => $namecat});
+		}
+		my $id = $element->id;
+		push @elements, $id;
+		$verified{$id} = 1;
+	}
+
+	foreach my $id (keys %element_ids) {
+		push @elements, $id;
+		if ($verify_exists && !$verified{$id}) {
+			if ($type eq 'negate') {
+				ConvoTreeEngine::Object::Element->findOrDie({id => $id, type => 'assess'});
+			}
+			else {
 				ConvoTreeEngine::Object::Element->findOrDie({id => $id});
 			}
 		}
@@ -674,17 +776,21 @@ sub clearNestedElements {
 
 sub sanitizeNesting {
 	my $self = shift;
+	my $args = $self->_prep_args(@_);
+
+	my $id = $self->id;
 
 	require ConvoTreeEngine::Object::Element::Nested;
 	my $e_table  = $self->_table;
 	my $ne_table = ConvoTreeEngine::Object::Element::Nested->_table;
 	my $rows = ConvoTreeEngine::Mysql->fetchRows(qq/
-		SELECT e.id, e.type, e.name, e.category, e.json FROM $ne_table ne
+		SELECT e.id, e.type, e.name, e.category, e.namecat, e.json FROM $ne_table ne
 		JOIN $e_table e ON ne.element_id = e.id
 		WHERE ne.nested_element_id = ?;
-	/, [$self->id]);
+	/, [$id]);
 
 	return unless @$rows;
+	$args->{id} = $id;
 
 	foreach my $row (@$rows) {
 		my $type    = $row->{type};
@@ -694,33 +800,35 @@ sub sanitizeNesting {
 		if ($type eq 'if') {
 			foreach my $cond (@{$jsonRef->{cond}}) {
 				if (@$cond > 1) {
-					$cond->[1] = $element->_sanitize_nesting_arrays($cond->[1], $self->id);
+					$cond->[1] = $element->_sanitize_nesting_arrays($cond->[1], $args);
 				}
 			}
 		}
 		elsif ($type eq 'assess') {
 			if (@{$jsonRef->{cond}} > 1) {
-				$jsonRef->{cond}[1] = $element->_sanitize_nesting_arrays($jsonRef->{cond}[1], $self->id);
+				$jsonRef->{cond}[1] = $element->_sanitize_nesting_arrays($jsonRef->{cond}[1], $args);
 			}
 		}
 		elsif ($type eq 'choice') {
 			foreach my $choice (@{$jsonRef->{choices}}) {
 				if (@$choice > 2) {
-					$choice->[2] = $element->_sanitize_nesting_arrays($choice->[2], $self->id);
+					$choice->[2] = $element->_sanitize_nesting_arrays($choice->[2], $args);
 				}
 			}
 		}
 		elsif ($type eq 'series') {
-			$jsonRef->{series} = $element->_sanitize_nesting_arrays($jsonRef->{series}, $self->id);
+			$jsonRef->{series} = $element->_sanitize_nesting_arrays($jsonRef->{series}, $args);
 		}
 
 		$element->update({json => $jsonRef, skip_nested => 1});
 	}
 
-	ConvoTreeEngine::Mysql->doQuery(qq/
-		DELETE FROM $ne_table
-		WHERE nested_element_id = ?;
-	/, [$self->id]);
+	if ($args->{remove}) {
+		ConvoTreeEngine::Mysql->doQuery(qq/
+			DELETE FROM $ne_table
+			WHERE nested_element_id = ?;
+		/, [$id]);
+	}
 
 	return;
 }
@@ -728,18 +836,35 @@ sub sanitizeNesting {
 sub _sanitize_nesting_arrays {
 	my $self         = shift;
 	my $nestingBlock = shift;
-	my $to_remove    = shift;
+	my $args         = shift;
+
+	my $id          = $args->{id};
+	my $old_namecat = $self->namecat   || '';
+	my $new_namecat = $args->{namecat} || $id;
+	my $remove      = $args->{remove};
 
 	my @elements;
 	if (ref $nestingBlock) {
-		foreach my $id (@$nestingBlock) {
-			push @elements, $id unless $id == $to_remove;
+		foreach my $ident (@$nestingBlock) {
+			if ($ident eq $id || $ident eq $old_namecat) {
+				unless ($remove) {
+					push @elements, $new_namecat;
+				}
+			}
+			else {
+				push @elements, $ident;
+			};
 		}
 	}
 	else {
-		unless ($nestingBlock == $to_remove) {
-			push @elements, $nestingBlock;
+		if ($nestingBlock eq $id || $nestingBlock eq $old_namecat) {
+			unless ($remove) {
+				push @elements, $new_namecat;
+			}
 		}
+		else {
+			push @elements, $nestingBlock;
+		};
 	}
 
 	return $elements[0] if scalar(@elements) == 1;
@@ -757,13 +882,14 @@ sub jsonRef {
 sub asHashRef {
 	my $self = shift;
 
-	my $hash = $self->jsonRef;
-	$hash->{type}     = $self->type;
-	$hash->{id}       = $self->id;
-	$hash->{name}     = $self->name;
-	$hash->{category} = $self->category;
-
-	return $hash;
+	return {
+		type     => $self->type,
+		id       => $self->id,
+		name     => $self->name,
+		category => $self->category,
+		namecat  => $self->namecat,
+		json     => $self->jsonRef,
+	};
 }
 
 1;

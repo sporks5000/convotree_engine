@@ -184,11 +184,14 @@ sub createTables {
 				CREATE TABLE IF NOT EXISTS ${prefix}element (
 					id BIGINT AUTO_INCREMENT PRIMARY KEY,
 					type VARCHAR(15) NOT NULL,
-					name VARCHAR(256),
-					category VARCHAR(50),
+					name VARCHAR(253),
+					category VARCHAR(253),
+					namecat VARCHAR(256),
 					json JSON NOT NULL,
 					INDEX ${prefix}element_category_index
 						(category) USING BTREE,
+					INDEX ${prefix}element_namecat_index
+						(namecat) USING BTREE,
 					UNIQUE ${prefix}element_name_category_index
 						(name, category),
 					FOREIGN KEY (type)
