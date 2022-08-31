@@ -348,6 +348,23 @@ sub searchWithNested {
 		return 0 if !length $value;
 		my @parts = split m/\s*(&|\|)\s*/, $value;
 		foreach my $part (@parts) {
+			if ($part =~ m/^!?seen:(.*)$/i) {
+				### A part can also be the string "seen:" followed by an identifier for an element (indicating that that element has already been seen by the user)
+				### If it's preceeded by an exclamation point, that means that it hasn't been seen
+				my $seen = $1;
+				return 0 unless $class->_validate_value($seen, ['positiveInt', 'namecat']);
+				next;
+			}
+			elsif ($part =~ m/^!?function:(.*)$/) {
+				### A part can indicate the name of a javascript function that will return a true or false value
+				my $func = $1;
+				return 0 unless $class->_validate_value($func, 'word');
+				next;
+			}
+			elsif ($part =! m/^!?first\z/) {
+				### A part can be the word "first" indicating that this no option previous to this one has returned true
+				next;
+			}
 			### Each part contains a variable name, an operator, and a condition
 			my $operator = do {
 				$part =~ m/([!><]=|[=><])/;
