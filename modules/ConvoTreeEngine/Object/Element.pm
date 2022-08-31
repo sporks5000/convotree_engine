@@ -625,7 +625,7 @@ sub _confirm_namecat {
 		else {
 			$args->{$key} //= undef;
 		}
-		if ($args->{$key}) {
+		if (defined $args->{$key}) {
 			my $isValid = $invocant->_validate_value($args->{$key}, 'words');
 			unless ($isValid) {
 				my $failures = $invocant->_validation_failures;
@@ -637,7 +637,7 @@ sub _confirm_namecat {
 		}
 	}
 
-	if ($args->{name} || $args->{category}) {
+	if (defined $args->{name} || defined $args->{category}) {
 		$args->{namecat} = ($args->{category} || '') . ":" . ($args->{name} || '');
 	}
 	else {
