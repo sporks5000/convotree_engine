@@ -50,16 +50,18 @@ my $app = sub {
 		}
 		elsif ($uri =~ m@/element/update/?@i) {
 			my %searchArgs;
-			$searchArgs{id} = delete $body->{id} if $body->{id};
-			$searchArgs{namecat} = delete $body->{namecat} if $body->{namecat};
+			foreach my $arg (qw/id name category namecat/) {
+				$searchArgs{$arg} = delete $body->{$arg} if exists $body->{$arg};
+			}
 			my $element = ConvoTreeEngine::Object::Element->findOrDie(\%searchArgs);
 			$element->update($body);
 			return $element->asHashRef;
 		}
 		elsif ($uri =~ m@/element/delete/?@i) {
 			my %searchArgs;
-			$searchArgs{id} = delete $body->{id} if $body->{id};
-			$searchArgs{namecat} = delete $body->{namecat} if $body->{namecat};
+			foreach my $arg (qw/id name category namecat/) {
+				$searchArgs{$arg} = delete $body->{$arg} if exists $body->{$arg};
+			}
 			my $element = ConvoTreeEngine::Object::Element->findOrDie(\%searchArgs);
 			$element->delete;
 			return {deleted => 1};

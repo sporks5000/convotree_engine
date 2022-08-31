@@ -86,6 +86,19 @@ sub create {
 	return $self;
 }
 
+sub findOrCreate {
+	my $invocant = shift;
+	my $args     = $invocant->_prep_args(@_);
+
+	$invocant->_confirm_namecat($args);
+	if ($args->{namecat}) {
+		my $self = $invocant->find({namecat => $args->{namecat}});
+		return $self if $self;
+	}
+
+	return $invocant->create($args);
+}
+
 sub update {
 	my $self = shift;
 	my $args = $self->_prep_args(@_);
