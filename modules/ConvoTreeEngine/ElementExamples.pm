@@ -232,11 +232,13 @@ our %examples = (
 		},
 	},
 	series => {
-		series => [1,2,3,5],
-		arbit  => {
+		series     => [1,2,3,5],
+		additional => [4,6],
+		arbit      => {
 			"Additional details" => {
 				"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 				"2" => 'The "series" key must contain either a single positive integer (representing a single element ID) or an array of positive integers',
+				"3" => 'The "additional" key is optional. It must contain either a single positive integer (representing a single element ID) or an array of positive integers. These elements will not be part of the ordered series, but they will still be returned when the series is requested.',
 			},
 		},
 	},

@@ -524,8 +524,9 @@ sub searchWithNested {
 			arbit => [0, 'ignore'],
 		},
 		series   => {
-			series => [1, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
-			arbit  => [0, 'ignore'],
+			series     => [1, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
+			additional => [0, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
+			arbit      => [0, 'ignore'],
 		},
 	);
 
@@ -711,6 +712,14 @@ sub listReferencedElements {
 		else {
 			push @elements, $jsonRef->{series};
 		}
+		if ($jsonRef->{additional}) {
+			if (ref $jsonRef->{additional}) {
+				push @elements, @{$jsonRef->{additional}};
+			}
+			else {
+				push @elements, $jsonRef->{additional};
+			}
+		}
 	}
 
 	my %element_ids;
@@ -835,6 +844,9 @@ sub sanitizeNesting {
 		}
 		elsif ($type eq 'series') {
 			$jsonRef->{series} = $element->_sanitize_nesting_arrays($jsonRef->{series}, $args);
+			if ($jsonRef->{additional}) {
+				$jsonRef->{additional} = $element->_sanitize_nesting_arrays($jsonRef->{additional}, $args);
+			}
 		}
 
 		$element->update({json => $jsonRef, skip_nested => 1});
