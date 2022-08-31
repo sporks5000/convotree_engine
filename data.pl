@@ -49,14 +49,18 @@ my $app = sub {
 			$response = $element->asHashRef;
 		}
 		elsif ($uri =~ m@/element/update/?@i) {
-			my $id = delete $body->{id};
-			my $element = ConvoTreeEngine::Object::Element->findOrDie({id => $id});
+			my %searchArgs;
+			$searchArgs{id} = delete $body->{id} if $body->{id};
+			$searchArgs{namecat} = delete $body->{namecat} if $body->{namecat};
+			my $element = ConvoTreeEngine::Object::Element->findOrDie(\%searchArgs);
 			$element->update($body);
 			return $element->asHashRef;
 		}
 		elsif ($uri =~ m@/element/delete/?@i) {
-			my $id = delete $body->{id};
-			my $element = ConvoTreeEngine::Object::Element->findOrDie({id => $id});
+			my %searchArgs;
+			$searchArgs{id} = delete $body->{id} if $body->{id};
+			$searchArgs{namecat} = delete $body->{namecat} if $body->{namecat};
+			my $element = ConvoTreeEngine::Object::Element->findOrDie(\%searchArgs);
 			$element->delete;
 			return {deleted => 1};
 		}
