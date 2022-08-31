@@ -59,7 +59,6 @@ sub create {
 	my $invocant = shift;
 	my $args     = $invocant->_prep_args(@_);
 
-	delete $args->{id};
 	$args->{json} = $invocant->_validate_json($args->{json}, $args->{type});
 
 	$invocant->_confirm_namecat($args);
