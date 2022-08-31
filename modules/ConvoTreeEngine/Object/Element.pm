@@ -497,7 +497,7 @@ sub searchWithNested {
 		stop     => {
 			arbit     => [0, 'ignore'],
 		},
-		varaible => {
+		variable => {
 			update => [1, 'variableUpdates'],
 			arbit  => [0, 'ignore'],
 		},

@@ -32,7 +32,7 @@ our %examples = (
 			[
 				'span class',
 				undef,
-				'varaibleName',
+				'variableName',
 			],
 		],
 		delay  => '1000',
@@ -143,7 +143,7 @@ our %examples = (
 			},
 		},
 	},
-	varaible => {
+	variable => {
 		update => {
 			var1 => '1',
 			var2 => 'string',
