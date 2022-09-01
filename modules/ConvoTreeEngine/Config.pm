@@ -12,4 +12,6 @@ our $dbPass = '';
 our $tablePrefix = '';
 our $testTablePrefix = '';
 
+our $modification_over_api = 0;
+
 1;

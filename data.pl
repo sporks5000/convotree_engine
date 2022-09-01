@@ -10,6 +10,7 @@ use warnings;
 use Plack::Request;
 use JSON;
 
+use ConvoTreeEngine::Config;
 use ConvoTreeEngine::Exceptions;
 use ConvoTreeEngine::Mysql;
 use ConvoTreeEngine::Object::Element;
@@ -44,39 +45,44 @@ my $app = sub {
 		} || {};
 		my $uri = $request->request_uri;
 
-		if ($uri =~ m@/element/create/?@i) {
-			my $element = ConvoTreeEngine::Object::Element->create($body);
-			$response = $element->asHashRef;
-		}
-		elsif ($uri =~ m@/element/update/?@i) {
-			my %searchArgs;
-			foreach my $arg (qw/id name category namecat/) {
-				$searchArgs{$arg} = delete $body->{$arg} if exists $body->{$arg};
-			}
-			my $element = ConvoTreeEngine::Object::Element->findOrDie(\%searchArgs);
-			$element->update($body);
-			return $element->asHashRef;
-		}
-		elsif ($uri =~ m@/element/delete/?@i) {
-			my %searchArgs;
-			foreach my $arg (qw/id name category namecat/) {
-				$searchArgs{$arg} = delete $body->{$arg} if exists $body->{$arg};
-			}
-			my $element = ConvoTreeEngine::Object::Element->findOrDie(\%searchArgs);
-			$element->delete;
-			return {deleted => 1};
-		}
-		elsif ($uri =~ m@/element/get/?@i) {
+		if ($uri =~ m@/element/get/?@i) {
 			my $ids = $body->{id} || $body->{ids};
-			my $elements = ConvoTreeEngine::Object::Element->searchWithNested($ids);
-			return $elements;
+			my $elements = ConvoTreeEngine::Object::Element->searchWithNested_hashRefs($ids);
+			$response = $elements;
 		}
-		else {
-			ConvoTreeEngine::Exception::Input->throw(
-				error => "API endpoint not found: '$uri'",
-				code  => 404,
-			);
-		};
+		elsif ($ConvoTreeEngine::Config::modification_over_api) {
+			if ($uri =~ m@/element/create/?@i) {
+				my $element = ConvoTreeEngine::Object::Element->create($body);
+				$response = $element->asHashRef;
+			}
+			elsif ($uri =~ m@/element/update/?@i) {
+				my %searchArgs;
+				foreach my $arg (qw/id name category namecat/) {
+					$searchArgs{$arg} = delete $body->{$arg} if exists $body->{$arg};
+				}
+				my $element = ConvoTreeEngine::Object::Element->findOrDie(\%searchArgs);
+				$element->update($body);
+				$response = $element->asHashRef;
+			}
+			elsif ($uri =~ m@/element/delete/?@i) {
+				my %searchArgs;
+				foreach my $arg (qw/id name category namecat/) {
+					$searchArgs{$arg} = delete $body->{$arg} if exists $body->{$arg};
+				}
+				my $element = ConvoTreeEngine::Object::Element->findOrDie(\%searchArgs);
+				$element->delete;
+				$response = {deleted => 1};
+			}
+		}
+
+		ConvoTreeEngine::Exception::Input->throw(
+			error => "API endpoint not found: '$uri'",
+			code  => 404,
+		) unless $response;
+
+		$response = JSON::encode_json({
+			response => $response,
+		});
 	};
 	if (my $ex = $@) {
 		ConvoTreeEngine::Exception::Unexpected->promote($ex);
@@ -93,8 +99,6 @@ my $app = sub {
 	return [
 		'200',
 		['Content-Type' => 'application/json; charset=utf8'],
-		[JSON::encode_json({
-			response => $response,
-		})],
+		[$response],
 	];
 };

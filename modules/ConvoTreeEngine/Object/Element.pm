@@ -235,11 +235,23 @@ sub searchWithNested {
 			category => $row->{e2_category},
 			namecat  => $row->{e2_namecat},
 			json     => $row->{e2_json},
-		});
+		}) if $row->{e2_id};
 	}
 
 	return values %elements if wantarray;
 	return \%elements;
+}
+
+sub searchWithNested_hashRefs {
+	my $invocant = shift;
+	my $elements = $invocant->searchWithNested(@_);
+
+	foreach my $id (keys %$elements) {
+		$elements->{$id} = $elements->{$id}->asHashRef;
+	}
+
+	return values %$elements if wantarray;
+	return $elements;
 }
 
 #================#
