@@ -385,7 +385,7 @@ sub searchWithNested {
 		return 1 if !defined $value;
 		return 0 if ref $value;
 		return 0 if !length $value;
-		my @parts = split m/\s*(&|\|)\s*/, $value;
+		my @parts = split m/\s*[&|]\s*/, $value;
 		foreach my $part (@parts) {
 			if ($part =~ m/^!?seen:(.*)$/i) {
 				### A part can also be the string "seen:" followed by an identifier for an element (indicating that that element has already been seen by the user)
@@ -400,7 +400,7 @@ sub searchWithNested {
 				return 0 unless $class->_validate_value($func, 'word');
 				next;
 			}
-			elsif ($part =! m/^!?first\z/) {
+			elsif ($part =~ m/^!?first\z/) {
 				### A part can be the word "first" indicating that this no option previous to this one has returned true
 				next;
 			}
@@ -677,7 +677,7 @@ sub _confirm_namecat {
 	}
 
 	if (defined $args->{name} || defined $args->{category}) {
-		$args->{namecat} = ($args->{category} || '') . ":" . ($args->{name} || '');
+		$args->{namecat} = ($args->{category} // '') . ":" . ($args->{name} // '');
 	}
 	else {
 		$args->{namecat} = undef;
