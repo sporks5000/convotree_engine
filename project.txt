@@ -232,4 +232,6 @@ Other details:
 		* When reconstructing the page, the "delay" and "prompt" fields should be ignored.
 
 
-
+Notes:
+	* Changing global CSS:
+		* https://stackoverflow.com/questions/6620393/is-it-possible-to-alter-a-css-stylesheet-using-javascript-not-the-style-of-an

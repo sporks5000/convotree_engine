@@ -90,10 +90,36 @@ sub findOrCreate {
 	my $invocant = shift;
 	my $args     = $invocant->_prep_args(@_);
 
+	if ($args->{id}) {
+		my $self = $invocant->find({id => $args->{id}});
+		return $self if $self;
+	}
 	$invocant->_confirm_namecat($args);
 	if ($args->{namecat}) {
 		my $self = $invocant->find({namecat => $args->{namecat}});
 		return $self if $self;
+	}
+
+	return $invocant->create($args);
+}
+
+sub createOrUpdate {
+	my $invocant = shift;
+	my $args     = $invocant->_prep_args(@_);
+
+	my $self;
+	if ($args->{id}) {
+		$self = $invocant->find({id => $args->{id}});
+	}
+	else {
+		$invocant->_confirm_namecat($args);
+		if ($args->{namecat}) {
+			$self = $invocant->find({namecat => $args->{namecat}});
+		}
+	}
+
+	if ($self) {
+		return $self->update($args);
 	}
 
 	return $invocant->create($args);
