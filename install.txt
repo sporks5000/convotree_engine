@@ -16,6 +16,8 @@ Run the following commands:
 		perl5/bin/cpanm DBI
 		perl5/bin/cpanm DBD::mysql
 		perl5/bin/cpanm Exception::Class
+		mkdir public_html/js
+		curl https://code.jquery.com/jquery-3.6.1.min.js > public_html/js/jquery-3.6.1.min.js
 		exit
 	cp -a /home/user_name/convotree_engine/example/starman.service /etc/systemd/system/starman.service
 	sed -i 's/username/user_name/g' /etc/systemd/system/starman.service
