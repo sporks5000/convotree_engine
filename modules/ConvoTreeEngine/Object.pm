@@ -54,6 +54,83 @@ sub _prep_args_multi {
 	return @response;
 }
 
+{
+	my %describes;
+	my %primary_keys;
+	sub _describe {
+		my $invocant = shift;
+
+		my $table = $invocant->_table;
+		return $describes{$table} ||= do {
+			my $describe = { map {$_->{Field} => $_} @{ $invocant->_mysql->fetchRows(qq/DESCRIBE $table;/) } };
+
+			my @primary;
+			foreach my $field (sort keys %$describe) {
+				if (($describe->{$field}{Key} || '') eq 'PRI') {
+					push @primary, $field;
+				}
+			}
+			if (@primary) {
+				$primary_keys{$table} = \@primary;
+			}
+
+			$describe;
+		};
+	}
+
+	sub _primary_keys {
+		my $invocant = shift;
+
+		my $table = $invocant->_table;
+		return $primary_keys{$table} || do {
+			$invocant->_describe();
+			$primary_keys{$table};
+		};
+
+	}
+}
+
+sub create {
+	my $class = shift;
+	my $args  = $class->_prep_args(@_);
+
+	my $self = $class->promote({});
+
+	my $describe = $class->_describe;
+
+	my $table = $class->_table;
+	my (@fields, @values);
+	foreach my $field (sort keys %$describe) {
+		if (exists $args->{$field}) {
+			push @fields, $field;
+			if ($args->{$field} && ref $args->{$field} && $describe->{$field}{Type} eq 'json') {
+				$args->{$field} = JSON::encode_json($args->{$field});
+			}
+			push @values, $args->{$field};
+			$self->{$field} = delete $args->{$field};
+		}
+	}
+	if (keys %$args) {
+		ConvoTreeEngine::Exception::Input->throw(
+			error => "Table '$table' does not have column(s) [" . join(', ', sort(keys %$args)) . ']',
+		);
+	}
+
+	my $questionmarks = join ',', ('?') x @fields;
+	my $fields = join ',', @fields;
+
+	if ($describe->{id} && ($describe->{id}{Key} || '') eq 'PRI') {
+		my $id = $class->_mysql->insertForId(qq/INSERT INTO $table($fields) VALUES($questionmarks);/, [@values]);
+
+		$self->{id} = $id;
+	}
+	else {
+		$class->_mysql->doQuery(qq/INSERT INTO $table($fields) VALUES($questionmarks);/, [@values]);
+	}
+
+	return $self;
+}
+
 sub _parse_query_attrs {
 	my $self  = shift;
 	my $attrs = shift;
@@ -99,6 +176,7 @@ sub search {
 	my ($args, $attrs) = $invocant->_prep_args_multi(2, @_);
 
 	my ($attrString, $bits) = $invocant->_parse_query_attrs($attrs);
+	my $describe = $invocant->_describe;
 
 	my $whereString;
 	my @whereString;
@@ -107,7 +185,7 @@ sub search {
 		$whereString = $args->{WHERE};
 	}
 	else {
-		foreach my $field (keys $args) {
+		foreach my $field (keys %$args) {
 			my $ref = ref($args->{$field}) || '';
 			if ($ref eq 'ARRAY') {
 				my $string = "$field IN (";
@@ -160,13 +238,13 @@ sub search {
 	$whereString = "WHERE $whereString" if $whereString;
 	push @input, @$bits;
 	my $table = $invocant->_table;
-	my $fields = $invocant->_fields;
+	my $fields = join ', ', keys(%$describe);
 	my $query = qq/
 		SELECT $fields FROM $table
 		$whereString
 		$attrString
 	/;
-	my $rows = ConvoTreeEngine::Mysql->fetchRows($query, \@input);
+	my $rows = $invocant->_mysql->fetchRows($query, \@input);
 
 	foreach my $row (@$rows) {
 		$invocant->promote($row);
@@ -212,6 +290,24 @@ sub findAndDie {
 	return;
 }
 
+sub _primary_key_where_clause {
+	my $invocant = shift;
+
+	my $table = $invocant->_table;
+	my $primary_keys = $invocant->_primary_keys;
+	die "Table '$table' does not have primary keys" unless $primary_keys && @$primary_keys;
+
+	my @where;
+	my @bits;
+	foreach my $key (@$primary_keys) {
+		push @where, "$key = ?";
+		push @bits, $invocant->{$key};
+	}
+	my $where = join ' AND ', @where;
+
+	return ($where, \@bits);
+}
+
 sub update {
 	my $self = shift;
 	my $args = $self->_prep_args(@_);
@@ -226,18 +322,33 @@ sub update {
 		}
 	}
 
+	my $describe = $self->_describe;
+
 	my @sets;
 	my @bits;
 	foreach my $arg (keys %$args) {
-		push @sets, "$arg = ?";
-		push @bits, $args->{$arg};
+		if ($describe->{$arg}) {
+			push @sets, "$arg = ?";
+			if ($args->{$arg} && ref $args->{$arg} && $describe->{$arg}{Type} eq 'json') {
+				$args->{$arg} = JSON::encode_json($args->{$arg});
+			}
+			push @bits, $args->{$arg};
+		}
+		else {
+			ConvoTreeEngine::Exception::Input->throw(
+				error => "The '$arg' field does not exist on the '" . ref $self . "' object",
+				args  => $args,
+			);
+		}
 	}
 	my $sets = join ', ', @sets;
-	push @bits, $self->id;
+
+	my ($where, $pk_bits) = $self->_primary_key_where_clause;
+	push @bits, @$pk_bits;
 
 	my $table = $self->_table;
-	ConvoTreeEngine::Mysql->doQuery(
-		qq/UPDATE $table SET $sets WHERE id = ?;/,
+	$self->_mysql->doQuery(
+		qq/UPDATE $table SET $sets WHERE $where;/,
 		\@bits,
 	);
 
@@ -247,10 +358,12 @@ sub update {
 sub delete {
 	my $self = shift;
 
+	my ($where, $pk_bits) = $self->_primary_key_where_clause;
+
 	my $table = $self->_table;
-	ConvoTreeEngine::Mysql->doQuery(
-		qq/DELETE FROM $table WHERE id = ?;/,
-		[$self->id],
+	$self->_mysql->doQuery(
+		qq/DELETE FROM $table WHERE $where;/,
+		$pk_bits,
 	);
 
 	return;
@@ -258,8 +371,18 @@ sub delete {
 
 sub refresh {
 	my $self = shift;
-	my $found = $self->find({id => $self->id});
-	%$self = %$found;
+
+	my $table    = $self->_table;
+	my $describe = $self->_describe;
+	my $fields   = join ', ', keys(%$describe);
+	my ($where, $pk_bits) = $self->_primary_key_where_clause;
+
+	my $query = qq/SELECT $fields FROM $table WHERE $where;/;
+	my $rows = $self->_mysql->fetchRows($query, $pk_bits);
+	if (@$rows) {
+		my $found = $rows->[0];
+		%$self = %$found;
+	}
 
 	return $self;
 }
@@ -280,9 +403,31 @@ sub promote {
 	return $_[1];
 }
 
+sub asHashRef {
+	my $self = shift;
+	my $describe = $self->_describe();
+
+	my $hash = {};
+	foreach my $field (keys %$describe) {
+		my $val = $self->{$field};
+		if ($val && $describe->{$field}{Type} eq 'json') {
+			$hash->{$field} = JSON::decode_json($val);
+		}
+		else {
+			$hash->{$field} = $val;
+		}
+	}
+
+	return $hash;
+}
+
 sub atomic {
 	my $invocant = shift;
-	return ConvoTreeEngine::Mysql->atomic(@_);
+	return $invocant->_mysql->atomic(@_);
+}
+
+sub _mysql {
+	return 'ConvoTreeEngine::Mysql';
 }
 
 1;

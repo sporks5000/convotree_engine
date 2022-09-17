@@ -11,12 +11,6 @@ sub _table {
 	return shift->SUPER::_table('element');
 }
 
-sub _fields {
-	my @fields = qw(id type name category namecat json);
-	return @fields if wantarray;
-	return join ', ', @fields;
-}
-
 sub _read_only_fields {
 	my @fields = qw(id type);
 	return @fields if wantarray;
@@ -27,28 +21,13 @@ sub _read_only_fields {
 #== Field Accessors ==#
 #=====================#
 
-sub id {
-	return shift->{id};
-}
+foreach my $field (qw/id type name category namecat json/) {
+	my $symbol_name = __PACKAGE__ . "::$field";
 
-sub type {
-	return shift->{type};
-}
-
-sub name {
-	return shift->{name};
-}
-
-sub category {
-	return shift->{category};
-}
-
-sub namecat {
-	return shift->{namecat};
-}
-
-sub json {
-	return shift->{json};
+	no strict 'refs';
+	*{$symbol_name} = sub {
+		return shift->{$field};
+	};
 }
 
 #==========#
@@ -66,19 +45,7 @@ sub create {
 	my $table = $invocant->_table;
 	my $self;
 	$invocant->atomic(sub {
-		my $id = ConvoTreeEngine::Mysql->insertForId(
-			qq/INSERT INTO $table (type, name, category, namecat, json) VALUES(?, ?, ?, ?, ?);/,
-			[$args->{type}, $args->{name}, $args->{category}, $args->{namecat}, $args->{json}],
-		);
-
-		$self = $invocant->promote({
-			id       => $id,
-			type     => $args->{type},
-			name     => $args->{name},
-			category => $args->{category},
-			namecat  => $args->{namecat},
-			json     => $args->{json},
-		});
+		$self = $invocant->SUPER::create($args);
 
 		$self->doNestedElements;
 	});
@@ -962,14 +929,10 @@ sub jsonRef {
 sub asHashRef {
 	my $self = shift;
 
-	return {
-		type     => $self->type,
-		id       => $self->id,
-		name     => $self->name,
-		category => $self->category,
-		namecat  => $self->namecat,
-		json     => $self->jsonRef,
-	};
+	my $hash = $self->SUPER::asHashRef;
+	$hash->{json} = $self->jsonRef;
+
+	return $hash;
 }
 
 1;
