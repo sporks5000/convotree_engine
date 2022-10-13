@@ -21,14 +21,7 @@ sub _read_only_fields {
 #== Field Accessors ==#
 #=====================#
 
-foreach my $field (qw/id type name category namecat json/) {
-	my $symbol_name = __PACKAGE__ . "::$field";
-
-	no strict 'refs';
-	*{$symbol_name} = sub {
-		return shift->{$field};
-	};
-}
+__PACKAGE__->createAccessors(qw/id type name category namecat json/);
 
 #==========#
 #== CRUD ==#

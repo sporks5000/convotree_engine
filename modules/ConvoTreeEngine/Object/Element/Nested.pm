@@ -19,14 +19,7 @@ sub _read_only_fields {
 #== Field Accessors ==#
 #=====================#
 
-foreach my $field (qw/element_id nested_element_id/) {
-	my $symbol_name = __PACKAGE__ . "::$field";
-
-	no strict 'refs';
-	*{$symbol_name} = sub {
-		return shift->{$field};
-	};
-}
+__PACKAGE__->createAccessors(qw/element_id nested_element_id/);
 
 #==========#
 #== CRUD ==#

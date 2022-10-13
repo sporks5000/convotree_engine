@@ -71,6 +71,6 @@ my $elements = ConvoTreeEngine::Object::Element->searchWithNested(@ids);
 print Data::Dumper::Dumper($elements);
 
 ### Verify that an arrayref instead of an array works
-my $elements = ConvoTreeEngine::Object::Element->searchWithNested(\@ids);
+$elements = ConvoTreeEngine::Object::Element->searchWithNested(\@ids);
 ### Verify that a namecat works
-my $elements = ConvoTreeEngine::Object::Element->searchWithNested('type tests:test series');
+$elements = ConvoTreeEngine::Object::Element->searchWithNested('type tests:test series');

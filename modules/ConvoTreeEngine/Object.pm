@@ -90,6 +90,22 @@ sub _prep_args_multi {
 	}
 }
 
+sub createAccessors {
+	my $class  = shift;
+	my @fields = @_;
+
+	foreach my $field (@fields) {
+		my $symbol_name = "${class}::$field";
+		no strict 'refs';
+		next if defined *{$symbol_name};
+		*{$symbol_name} = sub {
+			return shift->{$field};
+		};
+	}
+
+	return;
+}
+
 sub create {
 	my $class = shift;
 	my $args  = $class->_prep_args(@_);
@@ -140,32 +156,23 @@ sub _parse_query_attrs {
 
 	if (defined $attrs->{group_by}) {
 		$attrs->{group_by} = [$attrs->{group_by}] unless ref($attrs->{group_by} || '') eq 'ARRAY';
-		my $string = 'GROUP BY ' . join(',', ('?') x @{$attrs->{group_by}});
+		my $string = 'GROUP BY ' . join(',', @{$attrs->{group_by}});
 		push @string, $string;
-		push @bits,  @{$attrs->{group_by}};
-		delete $attrs->{group_by};
 		if (defined $attrs->{having}) {
 			push @string, 'HAVING ' . delete $attrs->{having};
 		}
 	}
-	else {
-		delete $attrs->{having};
-	}
 
 	if (defined $attrs->{order_by}) {
 		$attrs->{order_by} = [$attrs->{order_by}] unless ref($attrs->{order_by} || '') eq 'ARRAY';
-		my $string = 'ORDER BY ' . join(',', ('?') x @{$attrs->{order_by}});
+		my $string = 'ORDER BY ' . join(',', @{$attrs->{order_by}});
 		push @string, $string;
-		push @bits,  @{$attrs->{order_by}};
-		delete $attrs->{order_by};
 	}
 	if (defined $attrs->{limit}) {
-		push @string, 'LIMIT ?';
-		push @bits, delete $attrs->{limit};
+		push @string, 'LIMIT ' . $attrs->{limit};
 	}
 	if (defined $attrs->{offset}) {
-		push @string, 'OFFSET ?';
-		push @bits, delete $attrs->{offset};
+		push @string, 'OFFSET ' . $attrs->{offset};
 	}
 
 	return join(' ', @string), \@bits;
@@ -175,8 +182,18 @@ sub search {
 	my $invocant = shift;
 	my ($args, $attrs) = $invocant->_prep_args_multi(2, @_);
 
+	### We're going to mutate args, so do a shallow clone of them
+	$args = {map {$_ => $args->{$_}} keys %$args};
+
 	my ($attrString, $bits) = $invocant->_parse_query_attrs($attrs);
 	my $describe = $invocant->_describe;
+
+	my $table = $invocant->_table;
+
+	my $joinString = '';
+	if ($args->{JOIN}) {
+		$joinString = delete $args->{JOIN};
+	}
 
 	my $whereString;
 	my @whereString;
@@ -185,6 +202,12 @@ sub search {
 		$whereString = $args->{WHERE};
 	}
 	else {
+		foreach my $field (keys %$args) {
+			if ($describe->{$field} && $field !~ m/\./) {
+				$args->{"$table.$field"} = delete $args->{$field};
+			}
+		}
+
 		foreach my $field (keys %$args) {
 			my $ref = ref($args->{$field}) || '';
 			if ($ref eq 'ARRAY') {
@@ -237,10 +260,10 @@ sub search {
 	$whereString ||= join ' AND ', @whereString;
 	$whereString = "WHERE $whereString" if $whereString;
 	push @input, @$bits;
-	my $table = $invocant->_table;
-	my $fields = join ', ', keys(%$describe);
+	my $fields = "$table." . join(", $table.", keys(%$describe));
 	my $query = qq/
 		SELECT $fields FROM $table
+		$joinString
 		$whereString
 		$attrString
 	/;
