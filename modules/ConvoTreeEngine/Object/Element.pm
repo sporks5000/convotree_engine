@@ -22,6 +22,38 @@ sub _read_only_fields {
 #=====================#
 
 __PACKAGE__->createAccessors(qw/id type name category namecat json/);
+__PACKAGE__->createRelationships(
+	{
+		name   => 'nestedObjs',
+		class  => 'ConvoTreeEngine::Object::Element::Nested',
+		fields => {element_id => 'id'},
+		many   => 1,
+	},
+	{
+		name   => 'parentNestedObjs',
+		class  => 'ConvoTreeEngine::Object::Element::Nested',
+		fields => {nested_element_id => 'id'},
+		many   => 1,
+	},
+	{
+		name   => 'nestedElements',
+		class  => 'ConvoTreeEngine::Object::Element',
+		fields => {id => sub {
+			my $self = shift;
+			return map {$_->nested_element_id} $self->nestedObjs;
+		}},
+		many   => 1,
+	},
+	{
+		name   => 'parentElements',
+		class  => 'ConvoTreeEngine::Object::Element',
+		fields => {id => sub {
+			my $self = shift;
+			return map {$_->element_id} $self->parentNestedObjs;
+		}},
+		many   => 1,
+	},
+);
 
 #==========#
 #== CRUD ==#

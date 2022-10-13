@@ -3,6 +3,7 @@ package ConvoTreeEngine::Object;
 use strict;
 use warnings;
 
+use ConvoTreeEngine::Utils;
 use ConvoTreeEngine::Config;
 use ConvoTreeEngine::Mysql;
 
@@ -104,6 +105,80 @@ sub createAccessors {
 	}
 
 	return;
+}
+
+=head2 createRelationships
+
+Creaete a relationship between the calling class and another class
+
+Expects an array of hashrefs with the following keys:
+
+* name     - The name of the method
+* class    - The other class that we're relating to
+* fields   - A hashref where the keys are the names of args that would be passed into the other
+             method's 'search' class and the values are either methods on the calling class, or
+             code refs that expect the calling object to be passed in as the only argument.
+             Alternately, instead of a hashref, if only comparing a single field, and the name
+             is the same on both ends, you can just use that name.
+* order_by - Optional; a default order to use if no others are specified
+* many     - Optional, boolean; If present and true, call 'search', otherwise call 'find'
+
+=cut
+
+sub createRelationships {
+	my $class         = shift;
+	my @relationships = shift;
+
+	foreach my $rel (@relationships) {
+		my $symbol_name = "${class}::$rel->{name}";
+		no strict 'refs';
+		next if defined *{$symbol_name};
+		my $otherClass = $rel->{class};
+		ConvoTreeEngine::Utils->require($otherClass);
+
+		$rel->{fields} = {$rel->{fields} => $rel->{fields}} unless ref $rel->{fields};
+
+		my $mutate = '__' . $rel->{name} . '_mutateArgs';
+		*{"${class}::$mutate"} = sub {
+			my $self = shift;
+			my $args = shift;
+
+			foreach my $otherField (keys %{$rel->{fields}}) {
+				my $selfMethod = $rel->{fields}{$otherField};
+				my $value;
+				if ((ref $selfMethod || '') eq 'CODE') {
+					$value = $selfMethod->($self);
+				}
+				else {
+					$value = $self->$selfMethod();
+				}
+				$args->{$otherField} = $value;
+			}
+
+			return $args;
+		};
+		if ($rel->{many}) {
+			*{$symbol_name} = sub {
+				my $self = shift;
+				my ($args, $attrs) = $class->_prep_args_multi(2, @_);
+
+				$args = $self->$mutate($args);
+				$attrs->{order_by} ||= $rel->{order_by};
+
+				return $otherClass->search($args, $attrs);
+			};
+		}
+		else {
+			*{$symbol_name} = sub {
+				my $self = shift;
+				my $args = $class->_prep_args(@_);
+
+				$args = $self->$mutate($args);
+
+				return $otherClass->find($args);
+			};
+		}
+	}
 }
 
 sub create {

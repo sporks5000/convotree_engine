@@ -20,6 +20,20 @@ sub _read_only_fields {
 #=====================#
 
 __PACKAGE__->createAccessors(qw/element_id nested_element_id/);
+__PACKAGE__->createRelationships(
+	{
+		name   => 'parentElement',
+		class  => 'ConvoTreeEngine::Object::Element',
+		fields => {id => 'element_id'},
+		many   => 1,
+	},
+	{
+		name   => 'nestedElement',
+		class  => 'ConvoTreeEngine::Object::Element',
+		fields => {id => 'nested_element_id'},
+		many   => 1,
+	},
+);
 
 #==========#
 #== CRUD ==#
