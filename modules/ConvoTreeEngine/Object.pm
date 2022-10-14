@@ -227,9 +227,9 @@ sub _parse_query_attrs {
 	my $attrs = shift;
 
 	my @string;
-	my @bits;
 
 	if (defined $attrs->{group_by}) {
+		### I cannot think of a scenario where we would use this in a search, but including it anyway.
 		$attrs->{group_by} = [$attrs->{group_by}] unless ref($attrs->{group_by} || '') eq 'ARRAY';
 		my $string = 'GROUP BY ' . join(',', @{$attrs->{group_by}});
 		push @string, $string;
@@ -250,91 +250,264 @@ sub _parse_query_attrs {
 		push @string, 'OFFSET ' . $attrs->{offset};
 	}
 
-	return join(' ', @string), \@bits;
+	return join(' ', @string) || '';
 }
+
+sub _parse_where_args {
+	my $invocant     = shift;
+	my $whereString  = shift;
+	my $input        = shift;
+	my $fieldDetails = shift;
+	my $args         = shift;
+
+	my $ref = ref($args) || '';
+
+	if ($ref eq 'ARRAY') {
+		foreach my $argPart (@$args) {
+			my @nestedWhereString;
+			$invocant->_parse_where_args(\@nestedWhereString, $input, $fieldDetails, $argPart);
+			next unless @nestedWhereString;
+			if (@nestedWhereString == 1) {
+				push @$whereString, $nestedWhereString[0];
+			}
+			else {
+				my $string = '(' . join(' AND ', @nestedWhereString) . ')';
+				push @$whereString, $string;
+			}
+		}
+		return;
+	}
+	return unless $ref eq 'HASH';
+
+	### We're going to mutate args, so do a shallow clone of them
+	$args = {map {$_ => $args->{$_}} keys %$args};
+	delete @{$args}{qw/WHERE JOIN/};
+
+	my $table = $invocant->_table;
+	foreach my $field (keys %$args) {
+		next if $field eq 'OR' || $field eq 'AND';
+		if ($fieldDetails->{$field} && $field !~ m/\./) {
+			$args->{"$table.$field"} = delete $args->{$field};
+		}
+	}
+
+	FIELD:
+	foreach my $field (keys %$args) {
+		my $ref = ref($args->{$field}) || '';
+		if ($field eq 'OR' || $field eq 'AND') {
+			my @nestedWhereString;
+			$invocant->_parse_where_args(\@nestedWhereString, $input, $fieldDetails, $args->{$field});
+			next FIELD unless @nestedWhereString;
+			if (@nestedWhereString == 1) {
+				push @$whereString, $nestedWhereString[0];
+			}
+			else {
+				my $string = '(' . join(" $field ", @nestedWhereString) . ')';
+				push @$whereString, $string;
+			}
+		}
+		elsif ($ref eq 'ARRAY') {
+			my $string = "$field IN (";
+			my $hasUndef = 0;
+			my $count = 0;
+			my @complex;
+			foreach my $value (@{$args->{$field}}) {
+				if (!defined $value) {
+					$hasUndef = 1;
+				}
+				elsif (ref $value) {
+					push @complex, $value;
+				}
+				else {
+					$count++;
+					push @$input, $value;
+				}
+			}
+
+			my @nestedWhereString;
+			if ($hasUndef) {
+				push @nestedWhereString, "$field IS NULL";
+			}
+			if ($count) {
+				if ($count == 1) {
+					push @nestedWhereString, "$field = ?";
+				}
+				else {
+					my $string= "$field IN (" . join(',', ('?') x $count) . ')';
+					push @nestedWhereString, $string;
+				}
+			}
+			if (@complex) {
+				foreach my $value (@complex) {
+					$invocant->_parse_where_args(\@nestedWhereString, $input, $fieldDetails, {$field => $value});
+				}
+			}
+
+			next FIELD unless @nestedWhereString;
+			if (@nestedWhereString == 1) {
+				push @$whereString, $nestedWhereString[0];
+			}
+			else {
+				my $string = '(' . join(" OR ", @nestedWhereString) . ')';
+				push @$whereString, $string;
+			}
+		}
+		elsif ($ref eq 'HASH') {
+			HASH_KEY:
+			foreach my $key (keys %{$args->{$field}}) {
+				### Allowing multiple keys is useful if we want to search for greater than one value and less than another
+				my $value = $args->{$field}{$key};
+				if (!defined $value) {
+					$key = 'IS' if $key eq '=';
+					$key = 'IS NOT' if $key eq '!=';
+					push @$whereString, "$field $key NULL";
+				}
+				elsif ((ref $value || '') eq 'ARRAY') {
+					if ($key eq 'OR' || $key eq 'AND') {
+						my @nestedWhereString;
+						foreach my $val (@$value) {
+							$invocant->_parse_where_args(\@nestedWhereString, $input, $fieldDetails, {$field => $val});
+						}
+						next HASH_KEY unless @nestedWhereString;
+						if (@nestedWhereString == 1) {
+							push @$whereString, $nestedWhereString[0];
+						}
+						else {
+							my $string = '(' . join(" $key ", @nestedWhereString) . ')';
+							push @$whereString, $string;
+						}
+					}
+					else {
+						### Useful for the 'LIKE' operator
+						foreach my $val (@$value) {
+							if (!defined $val) {
+								$key = 'IS' if $key eq '=';
+								$key = 'IS NOT' if $key eq '!=';
+								push @$whereString, "$field $key NULL";
+							}
+							else {
+								push @$whereString, "$field $key ?";
+								push @$input, $val;
+							}
+						}
+					}
+				}
+				else {
+					push @$whereString, "$field $key ?";
+					push @$input, $value;
+				}
+			}
+		}
+		elsif ($ref eq 'SCALAR') {
+			push @$whereString, "$field ${$args->{$field}}";
+		}
+		else {
+			if (defined $args->{$field}) {
+				push @$whereString, "$field = ?";
+				push @$input, $args->{$field};
+			}
+			else {
+				push @$whereString, "$field IS NULL";
+			}
+		}
+	}
+
+	return;
+}
+
+=head2 search
+
+Compose a query string, Make the query, return the results.
+
+Expects two arguments, $args and $attrs. See `_parse_query_attrs` for explanation of attrs
+
+$args can contain the following special arguments:
+
+* WHERE - A text string containing a SQL "WHERE" clause (not begining with the word "WHERE",
+          but everything that comes after that).
+* JOIN  - A text string containing one or more SQL "JOIN" clauses (beginning with the
+          appropriate "JOIN", "LEFT JOIN", etc keywords).
+
+The following patterns can be used:
+
+* {field => $value}
+    * Translates to the string "field = $value" (or "field IS NULL" if the value is undef)
+    * The value will be appropriately quoted
+
+* {field => [$value1, $value2, $value3]}
+    * Translates to the string "field IN ($value1, $value2, $value3)"
+    * If one of the values is undef, instead translates to "(field IS NULL OR field IN
+      ($value1, $value3))"
+    * The values will be appropriately quoted
+
+* {field => [$value1, $value2, {$operator => $value3}]}
+    * Example: {field => [1, 3, {'>' => 7}]}
+    * The example would translate to the string "(field IN (1, 3) OR field > 7)"
+
+* {field => {$operator => $value}}
+    * Example: {count => {'>' => 1}}
+    * The example would translate to the string "field > 1"
+    * If the operator is "=" or "!=" and the value is undef, translates to "field IS NULL"
+      or "filed IS NOT NULL"
+    * The value will be appropriately quoted
+
+* {$field => {$operator1 => $value1, $operator2 => $value2}}
+    * Translates to something similar to "field $operator1 $value1 AND field $operator2 $value2"
+    * Useful for generating a string like "field > 1 AND field < 3"
+    * See above for other details
+
+* {field => {$operator => [$value1, $value2]}}
+    * Translates to a string similar to "field $operator $value1 AND field $operator $value2"
+    * Useful for the "LIKE" operator
+    * See above for other details
+
+* {field => \$value}
+    * Translates to the string "field $value"
+    * Presumably $value contains an operator and a value. If so, that falue will need to have been appropriately quoted in the string
+
+* {OR => {field1 => $value1, field2 => $value2}}
+    * Both "AND" and "OR" are supported
+    * Translates to the string "(field1 = $value1 OR field2 = $value2)"
+
+* {OR => [{field => $value1}, {field => $value2}]}
+    * Both "AND" and "OR" are supported
+    * Translates to the string "(field = $value1 OR field = $value2)"
+
+* {field => {OR => [$value1, $value2]}}
+    * Both "AND" and "OR" are supported
+    * Translates to the string "(field = $value1 OR field = $value2)"
+
+* {field => {OR => [{$operator => $value1}, {$operator => $value2}]}}
+    * Both "AND" and "OR" are supported
+    * Example: {field => {OR => [{'>' => 1}, {'<' => 5}]}}
+    * The example would translate to the string "(field > 1 OR field < 5)"
+
+=cut
 
 sub search {
 	my $invocant = shift;
 	my ($args, $attrs) = $invocant->_prep_args_multi(2, @_);
 
-	### We're going to mutate args, so do a shallow clone of them
-	$args = {map {$_ => $args->{$_}} keys %$args};
-
-	my ($attrString, $bits) = $invocant->_parse_query_attrs($attrs);
+	my $attrString = $invocant->_parse_query_attrs($attrs);
 	my $describe = $invocant->_describe;
 
 	my $table = $invocant->_table;
 
 	my $joinString = '';
 	if ($args->{JOIN}) {
-		$joinString = delete $args->{JOIN};
+		$joinString = $args->{JOIN};
 	}
 
 	my $whereString;
 	my @whereString;
+	push @whereString, $args->{WHERE} if $args->{WHERE};
 	my @input;
-	if ($args->{WHERE}) {
-		$whereString = $args->{WHERE};
-	}
-	else {
-		foreach my $field (keys %$args) {
-			if ($describe->{$field} && $field !~ m/\./) {
-				$args->{"$table.$field"} = delete $args->{$field};
-			}
-		}
 
-		foreach my $field (keys %$args) {
-			my $ref = ref($args->{$field}) || '';
-			if ($ref eq 'ARRAY') {
-				my $string = "$field IN (";
-				my $hasUndef = 0;
-				my @args;
-				foreach my $value (@{$args->{$field}}) {
-					if (defined $value) {
-						$string .= '?, ';
-						push @args, $value;
-					}
-					else {
-						$hasUndef = 1;
-					}
-				}
-				$string = substr($string, 0, -2) . ')';
+	$invocant->_parse_where_args(\@whereString, \@input, $describe, $args);
 
-				if ($hasUndef) {
-					$string = "($field IS NULL OR $string)";
-				}
-
-				push @whereString, $string;
-				push @input, @{$args->{$field}};
-			}
-			elsif ($ref eq 'HASH' && scalar(keys %{$args->{$field}}) == 1) {
-				my ($key) = keys %{$args->{$field}};
-				my $value = $args->{$field}{$key};
-				if (!defined $value) {
-					$key = 'IS' if $key eq '=';
-					$key = 'IS NOT' if $key eq '!=';
-					push @whereString, "$field $key NULL";
-				}
-				else {
-					push @whereString, "$field $key ?";
-					push @input, $value;
-				}
-			}
-			else {
-				if (defined $args->{$field}) {
-					push @whereString, "$field = ?";
-					push @input, $args->{$field};
-				}
-				else {
-					push @whereString, "$field IS NULL";
-				}
-			}
-		}
-	}
-
-	$whereString ||= join ' AND ', @whereString;
+	$whereString = join ' AND ', @whereString;
 	$whereString = "WHERE $whereString" if $whereString;
-	push @input, @$bits;
+
 	my $fields = "$table." . join(", $table.", keys(%$describe));
 	my $query = qq/
 		SELECT $fields FROM $table
