@@ -146,8 +146,12 @@ sub createRelationships {
 			foreach my $otherField (keys %{$rel->{fields}}) {
 				my $selfMethod = $rel->{fields}{$otherField};
 				my $value;
-				if ((ref $selfMethod || '') eq 'CODE') {
+				my $ref = ref $selfMethod || '';
+				if ($ref eq 'CODE') {
 					$value = $selfMethod->($self);
+				}
+				elsif ($ref eq 'SCALAR') {
+					$value = $$selfMethod;
 				}
 				else {
 					$value = $self->$selfMethod();
@@ -180,6 +184,8 @@ sub createRelationships {
 		}
 	}
 }
+
+sub _dynamicSubclass {return shift;}
 
 sub create {
 	my $class = shift;
@@ -219,7 +225,7 @@ sub create {
 		$class->_mysql->doQuery(qq/INSERT INTO $table($fields) VALUES($questionmarks);/, [@values]);
 	}
 
-	return $self;
+	return $self->_dynamicSubclass;
 }
 
 sub _parse_query_attrs {
@@ -670,7 +676,7 @@ sub promote {
 	my $class = ref($invocant) || $invocant;
 
 	my $new = bless $_[1], $class;
-	$_[1] = $new;
+	$_[1] = $new->_dynamicSubclass;
 	return $_[1];
 }
 
