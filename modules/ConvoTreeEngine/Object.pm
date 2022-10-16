@@ -118,11 +118,12 @@ Expects an array of hashrefs with the following keys:
 * name     - The name of the method
 * class    - The other class that we're relating to
 * fields   - A hashref where the keys are the names of args that would be passed into the other
-             method's 'search' class and the values are either methods on the calling class, or
-             code refs that expect the calling object to be passed in as the only argument, or a
-             scalar-ref of the specific value. Alternately, instead of a hashref, if only
-             comparing a single field, and the name is the same on both ends, you can just use
-             that name.
+             method's 'search' class and each value is either 1) a method on the calling class
+             which will be called to determine the value, or 2) a code ref (expecting the
+             calling object to be passed in as the only argument) which will be called to return
+             a value, or 3) a scalar-ref of the specific value. Alternately, instead of a
+             hashref, if only comparing a single field, and the name is the same on both ends,
+             you can just use that name.
 * order_by - Optional; a default order to use if no others are specified
 * many     - Optional, boolean; If present and true, call 'search', otherwise call 'find'
 * join     - See below.
@@ -131,9 +132,10 @@ The above can be fairly straightforward for one-to-one and one-to-many relations
 with many-to-many relationshipsthis becomes more complex. The code here has a solution for
 many-to-many relationships that are achieved with a separate table containing two columns, each
 contaninig references to the two related tables. With this, the keys in the 'fields' hashref are
-looking at either of the other tables, and 'join' will either contain an arrayref with the
+looking at either of the other tables, and 'join' will either contain 1) an arrayref with the
 intermediary class name, the field on the destination class, and the related field on the
-intermediary class, or a scalar containing a JOIN string.
+intermediary class, or 2) a coderef that will produce the join string, or 3) a scalar containing
+a JOIN string.
 
 Example 1:
 
@@ -158,6 +160,20 @@ Solution B:
     class  => 'ACW::Objects::SQLite::LicenseReconcile::CPLicense',
     fields => {ACW::Objects::SQLite::LicenseReconcile::PullToLicense->_table . '.pull_id' => 'id'},
     join   => 'JOIN pull_to_license ON cp_license.id = pull_to_license.license_id',
+    many   => 1,
+}
+
+Solution C:
+
+{
+    class  => 'Unreasonable::Objects::SQLite::LicenseReconcile::CPLicense',
+    fields => {Unreasonable::Objects::SQLite::LicenseReconcile::PullToLicense->_table . '.pull_id' => 'id'},
+    join   => sub {
+        my $self = shift; ### Not doing anything with it in this example, but we could.
+        my $destTable = Unreasonable::Objects::SQLite::LicenseReconcile::CPLicense->_table;
+        my $joinTable = Unreasonable::Objects::SQLite::LicenseReconcile::PullToLicense->_table;
+        return "JOIN $joinTable ON $destTable.id = $joinTable.license_id";
+    },
     many   => 1,
 }
 
@@ -193,6 +209,37 @@ sub createRelationships {
 	my $class         = shift;
 	my @relationships = @_;
 
+	my $getValue; $getValue = sub {
+		my $self       = shift;
+		my $selfMethod = shift;
+
+		my $value;
+		my $ref = ref $selfMethod || '';
+		if ($ref eq 'CODE') {
+			$value = $selfMethod->($self);
+		}
+		elsif ($ref eq 'ARRAY') {
+			$value = [];
+			foreach my $nested (@$selfMethod) {
+				push @$value, $getValue->($self, $nested);
+			}
+		}
+		elsif ($ref eq 'HASH') {
+			$value = {};
+			foreach my $key (keys %$selfMethod) {
+				$value->{$key} = $getValue->($self, $selfMethod->{$key});
+			}
+		}
+		elsif ($ref eq 'SCALAR' || $ref eq 'REF') {
+			$value = $$selfMethod;
+		}
+		else {
+			$value = $self->$selfMethod();
+		}
+
+		return $value;
+	};
+
 	foreach my $rel (@relationships) {
 		my $symbol_name = "${class}::$rel->{name}";
 		no strict 'refs';
@@ -215,6 +262,9 @@ sub createRelationships {
 
 				$rel->{join} = "JOIN $joinTable ON $destTable.$destColumn = $joinTable.$joinColumn";
 			}
+			elsif ($ref = 'CODE') {
+				### Do nothing
+			}
 			elsif ($ref) {
 				die "Improper formatting for relationship 'join' field: " . Data::Dumper::Dumper($rel->{join});
 			}
@@ -228,24 +278,32 @@ sub createRelationships {
 			### We're going to mutate args, so do a shallow clone of them
 			$args = {map {$_ => $args->{$_}} keys %$args};
 
+			my $args2 = {};;
 			foreach my $otherField (keys %{$rel->{fields}}) {
 				my $selfMethod = $rel->{fields}{$otherField};
-				my $value;
-				my $ref = ref $selfMethod || '';
-				if ($ref eq 'CODE') {
-					$value = $selfMethod->($self);
-				}
-				elsif ($ref eq 'SCALAR') {
-					$value = $$selfMethod;
-				}
-				else {
-					$value = $self->$selfMethod();
-				}
-				$args->{$otherField} = $value;
+				my $value = $getValue->($self, $selfMethod);
+				$args2->{$otherField} = $value;
 			}
 
-			if ($rel->{join}) {
-				$args->{JOIN} = $args->{JOIN} ? $args->{JOIN} . ' ' . $rel->{join} : $rel->{join};
+			my $describe = $otherClass->_describe;
+
+			my $whereString;
+			my @whereString;
+			push @whereString, $args->{WHERE} if $args->{WHERE};
+			my @input;
+			push @input, @{$args->{INPUT}} if $args->{INPUT};
+
+			$otherClass->_parse_where_args(\@whereString, \@input, $describe, $args2);
+
+			$whereString = join ' AND ', @whereString;
+			$args->{WHERE} = $whereString;
+			$args->{INPUT} = \@input;
+
+			if (my $join = $rel->{join}) {
+				if (ref $join) {
+					$join = $join->($self);
+				}
+				$args->{JOIN} = $args->{JOIN} ? $args->{JOIN} . ' ' . $join : $join;
 			}
 
 			return $args;
@@ -276,6 +334,7 @@ sub createRelationships {
 	return;
 }
 
+##### TODO: Rethink how subclassing works
 sub _dynamicSubclass {return shift;}
 
 sub create {
@@ -378,7 +437,7 @@ sub _parse_where_args {
 
 	### We're going to mutate args, so do a shallow clone of them
 	$args = {map {$_ => $args->{$_}} keys %$args};
-	delete @{$args}{qw/WHERE JOIN/};
+	delete @{$args}{qw/WHERE JOIN INPUT/};
 
 	my $table = $invocant->_table;
 	foreach my $field (keys %$args) {
@@ -599,6 +658,7 @@ sub search {
 	my @whereString;
 	push @whereString, $args->{WHERE} if $args->{WHERE};
 	my @input;
+	push @input, @{$args->{INPUT}} if $args->{INPUT};
 
 	$invocant->_parse_where_args(\@whereString, \@input, $describe, $args);
 
