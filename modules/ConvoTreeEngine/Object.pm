@@ -3,6 +3,8 @@ package ConvoTreeEngine::Object;
 use strict;
 use warnings;
 
+use Data::Dumper;
+
 use ConvoTreeEngine::Utils;
 use ConvoTreeEngine::Config;
 use ConvoTreeEngine::Mysql;
@@ -117,17 +119,79 @@ Expects an array of hashrefs with the following keys:
 * class    - The other class that we're relating to
 * fields   - A hashref where the keys are the names of args that would be passed into the other
              method's 'search' class and the values are either methods on the calling class, or
-             code refs that expect the calling object to be passed in as the only argument.
-             Alternately, instead of a hashref, if only comparing a single field, and the name
-             is the same on both ends, you can just use that name.
+             code refs that expect the calling object to be passed in as the only argument, or a
+             scalar-ref of the specific value. Alternately, instead of a hashref, if only
+             comparing a single field, and the name is the same on both ends, you can just use
+             that name.
 * order_by - Optional; a default order to use if no others are specified
 * many     - Optional, boolean; If present and true, call 'search', otherwise call 'find'
+* join     - See below.
+
+The above can be fairly straightforward for one-to-one and one-to-many relationships, however
+with many-to-many relationshipsthis becomes more complex. The code here has a solution for
+many-to-many relationships that are achieved with a separate table containing two columns, each
+contaninig references to the two related tables. With this, the keys in the 'fields' hashref are
+looking at either of the other tables, and 'join' will either contain an arrayref with the
+intermediary class name, the field on the destination class, and the related field on the
+intermediary class, or a scalar containing a JOIN string.
+
+Example 1:
+
+    SELECT * FROM cp_license
+    JOIN pull_to_license ON cp_license.id = pull_to_license.license_id
+    WHERE pull_to_license.pull_id = ?;
+
+    ... where '?' is the value of the 'id' column on a row of the "pull" table
+
+Solution A:
+
+{
+    class  => 'ACW::Objects::SQLite::LicenseReconcile::CPLicense',
+    fields => {ACW::Objects::SQLite::LicenseReconcile::PullToLicense->_table . '.pull_id' => 'id'},
+    join   => ['ACW::Objects::SQLite::LicenseReconcile::PullToLicense', 'id', 'license_id'],
+    many   => 1,
+}
+
+Solution B:
+
+{
+    class  => 'ACW::Objects::SQLite::LicenseReconcile::CPLicense',
+    fields => {ACW::Objects::SQLite::LicenseReconcile::PullToLicense->_table . '.pull_id' => 'id'},
+    join   => 'JOIN pull_to_license ON cp_license.id = pull_to_license.license_id',
+    many   => 1,
+}
+
+Example 2:
+
+    SELECT * FROM pull
+    JOIN pull_to_license ON pull.id = pull_to_license.pull_id
+    WHERE pull_to_license.license_id = ? AND pull.type = 'cpanel';
+
+    ... where '?' is the value of the 'id' column on a row of the "cp_license" table
+
+Solution A:
+
+{
+    class  => 'ACW::Objects::SQLite::LicenseReconcile::Pull',
+    fields => {ACW::Objects::SQLite::LicenseReconcile::PullToLicense->_table . '.license_id' => 'id', type => \'cpanel'},
+    join   => ['ACW::Objects::SQLite::LicenseReconcile::PullToLicense', 'id', 'pull_id'],
+    many   => 1,
+}
+
+Solution B:
+
+{
+    class  => 'ACW::Objects::SQLite::LicenseReconcile::Pull',
+    fields => {ACW::Objects::SQLite::LicenseReconcile::PullToLicense->_table . '.license_id' => 'id', type => \'cpanel'},
+    join   => 'JOIN pull_to_license ON pull.id = pull_to_license.pull_id',
+    many   => 1,
+}
 
 =cut
 
 sub createRelationships {
 	my $class         = shift;
-	my @relationships = shift;
+	my @relationships = @_;
 
 	foreach my $rel (@relationships) {
 		my $symbol_name = "${class}::$rel->{name}";
@@ -138,10 +202,31 @@ sub createRelationships {
 
 		$rel->{fields} = {$rel->{fields} => $rel->{fields}} unless ref $rel->{fields};
 
+		if ($rel->{join}) {
+			my $ref = ref $rel->{join} || '';
+			if ($ref eq 'ARRAY' && @{$rel->{join}} == 3) {
+				my $joinClass = $rel->{join}[0];
+				ConvoTreeEngine::Utils->require($joinClass);
+
+				my $joinTable  = $joinClass->_table;
+				my $destTable  = $otherClass->_table;
+				my $destColumn = $rel->{join}[1];
+				my $joinColumn = $rel->{join}[2];
+
+				$rel->{join} = "JOIN $joinTable ON $destTable.$destColumn = $joinTable.$joinColumn";
+			}
+			elsif ($ref) {
+				die "Improper formatting for relationship 'join' field: " . Data::Dumper::Dumper($rel->{join});
+			}
+		}
+
 		my $mutate = '__' . $rel->{name} . '_mutateArgs';
 		*{"${class}::$mutate"} = sub {
 			my $self = shift;
 			my $args = shift;
+
+			### We're going to mutate args, so do a shallow clone of them
+			$args = {map {$_ => $args->{$_}} keys %$args};
 
 			foreach my $otherField (keys %{$rel->{fields}}) {
 				my $selfMethod = $rel->{fields}{$otherField};
@@ -157,6 +242,10 @@ sub createRelationships {
 					$value = $self->$selfMethod();
 				}
 				$args->{$otherField} = $value;
+			}
+
+			if ($rel->{join}) {
+				$args->{JOIN} = $args->{JOIN} ? $args->{JOIN} . ' ' . $rel->{join} : $rel->{join};
 			}
 
 			return $args;
@@ -183,6 +272,8 @@ sub createRelationships {
 			};
 		}
 	}
+
+	return;
 }
 
 sub _dynamicSubclass {return shift;}
