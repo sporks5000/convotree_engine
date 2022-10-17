@@ -60,16 +60,16 @@ sub _prep_args_multi {
 {
 	my %describes;
 	my %primary_keys;
-	sub _describe {
+	sub _field_details {
 		my $invocant = shift;
 
 		my $table = $invocant->_table;
 		return $describes{$table} ||= do {
-			my $describe = { map {$_->{Field} => $_} @{ $invocant->_mysql->fetchRows(qq/DESCRIBE $table;/) } };
+			my $fieldDetails = { map {$_->{Field} => $_} @{ $invocant->_mysql->fetchRows(qq/DESCRIBE $table;/) } };
 
 			my @primary;
-			foreach my $field (sort keys %$describe) {
-				if (($describe->{$field}{Key} || '') eq 'PRI') {
+			foreach my $field (sort keys %$fieldDetails) {
+				if (($fieldDetails->{$field}{Key} || '') eq 'PRI') {
 					push @primary, $field;
 				}
 			}
@@ -77,7 +77,7 @@ sub _prep_args_multi {
 				$primary_keys{$table} = \@primary;
 			}
 
-			$describe;
+			$fieldDetails;
 		};
 	}
 
@@ -86,7 +86,7 @@ sub _prep_args_multi {
 
 		my $table = $invocant->_table;
 		return $primary_keys{$table} || do {
-			$invocant->_describe();
+			$invocant->_field_details();
 			$primary_keys{$table};
 		};
 
@@ -121,9 +121,9 @@ Expects an array of hashrefs with the following keys:
              method's 'search' class and each value is either 1) a method on the calling class
              which will be called to determine the value, or 2) a code ref (expecting the
              calling object to be passed in as the only argument) which will be called to return
-             a value, or 3) a scalar-ref of the specific value. Alternately, instead of a
-             hashref, if only comparing a single field, and the name is the same on both ends,
-             you can just use that name.
+             a value, or 3) a scalar-ref of the specific value or a ref-ref of the specific
+             arrayref or hashref to use. Alternately, instead of a hashref, if only comparing a
+             single field, and the name is the same on both ends, you can just use that name.
 * order_by - Optional; a default order to use if no others are specified
 * many     - Optional, boolean; If present and true, call 'search', otherwise call 'find'
 * join     - See below.
@@ -166,12 +166,12 @@ Solution B:
 Solution C:
 
 {
-    class  => 'Unreasonable::Objects::SQLite::LicenseReconcile::CPLicense',
-    fields => {Unreasonable::Objects::SQLite::LicenseReconcile::PullToLicense->_table . '.pull_id' => 'id'},
+    class  => 'ACW::Objects::SQLite::LicenseReconcile::CPLicense',
+    fields => {ACW::Objects::SQLite::LicenseReconcile::PullToLicense->_table . '.pull_id' => 'id'},
     join   => sub {
         my $self = shift; ### Not doing anything with it in this example, but we could.
-        my $destTable = Unreasonable::Objects::SQLite::LicenseReconcile::CPLicense->_table;
-        my $joinTable = Unreasonable::Objects::SQLite::LicenseReconcile::PullToLicense->_table;
+        my $destTable = ACW::Objects::SQLite::LicenseReconcile::CPLicense->_table;
+        my $joinTable = ACW::Objects::SQLite::LicenseReconcile::PullToLicense->_table;
         return "JOIN $joinTable ON $destTable.id = $joinTable.license_id";
     },
     many   => 1,
@@ -202,6 +202,10 @@ Solution B:
     join   => 'JOIN pull_to_license ON pull.id = pull_to_license.pull_id',
     many   => 1,
 }
+
+Really, if you're trying to achieve anything more complicated than this would allow, then what
+you're trying to do would probably be more confusing to do this way than it would to just create
+your own method within the class and give it proper commenting and such.
 
 =cut
 
@@ -285,7 +289,7 @@ sub createRelationships {
 				$args2->{$otherField} = $value;
 			}
 
-			my $describe = $otherClass->_describe;
+			my $fieldDetails = $otherClass->_field_details;
 
 			my $whereString;
 			my @whereString;
@@ -293,7 +297,7 @@ sub createRelationships {
 			my @input;
 			push @input, @{$args->{INPUT}} if $args->{INPUT};
 
-			$otherClass->_parse_where_args(\@whereString, \@input, $describe, $args2);
+			$otherClass->_parse_where_args(\@whereString, \@input, $fieldDetails, $args2);
 
 			$whereString = join ' AND ', @whereString;
 			$args->{WHERE} = $whereString;
@@ -343,14 +347,14 @@ sub create {
 
 	my $self = $class->promote({});
 
-	my $describe = $class->_describe;
+	my $fieldDetails = $class->_field_details;
 
 	my $table = $class->_table;
 	my (@fields, @values);
-	foreach my $field (sort keys %$describe) {
+	foreach my $field (sort keys %$fieldDetails) {
 		if (exists $args->{$field}) {
 			push @fields, $field;
-			if ($args->{$field} && ref $args->{$field} && $describe->{$field}{Type} eq 'json') {
+			if ($args->{$field} && ref $args->{$field} && $fieldDetails->{$field}{Type} eq 'json') {
 				$args->{$field} = JSON::encode_json($args->{$field});
 			}
 			push @values, $args->{$field};
@@ -366,7 +370,7 @@ sub create {
 	my $questionmarks = join ',', ('?') x @fields;
 	my $fields = join ',', @fields;
 
-	if ($describe->{id} && ($describe->{id}{Key} || '') eq 'PRI') {
+	if ($fieldDetails->{id} && ($fieldDetails->{id}{Key} || '') eq 'PRI') {
 		my $id = $class->_mysql->insertForId(qq/INSERT INTO $table($fields) VALUES($questionmarks);/, [@values]);
 
 		$self->{id} = $id;
@@ -379,25 +383,37 @@ sub create {
 }
 
 sub _parse_query_attrs {
-	my $self  = shift;
-	my $attrs = shift;
+	my $invocant     = shift;
+	my $attrs        = shift;
+	my $fieldDetails = shift || $invocant->_field_details;
+
+	my $table = $invocant->_table;
 
 	my @string;
 
-	if (defined $attrs->{group_by}) {
-		### I cannot think of a scenario where we would use this in a search, but including it anyway.
-		$attrs->{group_by} = [$attrs->{group_by}] unless ref($attrs->{group_by} || '') eq 'ARRAY';
-		my $string = 'GROUP BY ' . join(',', @{$attrs->{group_by}});
-		push @string, $string;
-		if (defined $attrs->{having}) {
-			push @string, 'HAVING ' . delete $attrs->{having};
-		}
-	}
+	### We're going to mutate args, so do a shallow clone of them
+	$attrs = {map {$_ => $attrs->{$_}} keys %$attrs};
 
 	if (defined $attrs->{order_by}) {
 		$attrs->{order_by} = [$attrs->{order_by}] unless ref($attrs->{order_by} || '') eq 'ARRAY';
-		my $string = 'ORDER BY ' . join(',', @{$attrs->{order_by}});
-		push @string, $string;
+		my @order;
+		foreach my $order (@{$attrs->{order_by}}) {
+			my @fields = split m/\s*,\s*/, $order;
+			foreach my $f (@fields) {
+				my ($field, $direction) = split m/\s+/, $f, 2;
+				if ($field =~ m/^me\.[^.]+$/) {
+					$field = "$table." . substr($field, 3);
+				}
+				elsif ($fieldDetails->{$field} && $field !~ m/\./) {
+					$field = "$table.$field";
+				}
+				$field = "$field " . uc($direction) if $direction;
+				push @order, $field;
+			}
+		}
+
+		my $string = join ', ', @order;
+		push @string, "ORDER BY $string";
 	}
 	if (defined $attrs->{limit}) {
 		push @string, 'LIMIT ' . $attrs->{limit};
@@ -441,8 +457,11 @@ sub _parse_where_args {
 
 	my $table = $invocant->_table;
 	foreach my $field (keys %$args) {
-		next if $field eq 'OR' || $field eq 'AND';
-		if ($fieldDetails->{$field} && $field !~ m/\./) {
+		next if $field =~ m/^-?(AND|OR)$/i;
+		if ($field =~ m/^me\.[^.]+$/) {
+			$args->{"$table." . substr($field, 3)} = delete $args->{$field};
+		}
+		elsif ($fieldDetails->{$field} && $field !~ m/\./) {
 			$args->{"$table.$field"} = delete $args->{$field};
 		}
 	}
@@ -450,7 +469,7 @@ sub _parse_where_args {
 	FIELD:
 	foreach my $field (keys %$args) {
 		my $ref = ref($args->{$field}) || '';
-		if ($field eq 'OR' || $field eq 'AND') {
+		if ($field =~ m/^-?(AND|OR)$/i) {
 			my @nestedWhereString;
 			$invocant->_parse_where_args(\@nestedWhereString, $input, $fieldDetails, $args->{$field});
 			next FIELD unless @nestedWhereString;
@@ -458,6 +477,8 @@ sub _parse_where_args {
 				push @$whereString, $nestedWhereString[0];
 			}
 			else {
+				$field =~ s/^-//;
+				$field = uc($field);
 				my $string = '(' . join(" $field ", @nestedWhereString) . ')';
 				push @$whereString, $string;
 			}
@@ -519,7 +540,7 @@ sub _parse_where_args {
 					push @$whereString, "$field $key NULL";
 				}
 				elsif ((ref $value || '') eq 'ARRAY') {
-					if ($key eq 'OR' || $key eq 'AND') {
+					if ($key =~ m/^-?(AND|OR)$/i) {
 						my @nestedWhereString;
 						foreach my $val (@$value) {
 							$invocant->_parse_where_args(\@nestedWhereString, $input, $fieldDetails, {$field => $val});
@@ -529,6 +550,8 @@ sub _parse_where_args {
 							push @$whereString, $nestedWhereString[0];
 						}
 						else {
+							$key =~ s/^-//;
+							$key = uc($key);
 							my $string = '(' . join(" $key ", @nestedWhereString) . ')';
 							push @$whereString, $string;
 						}
@@ -577,12 +600,15 @@ Compose a query string, Make the query, return the results.
 
 Expects two arguments, $args and $attrs. See `_parse_query_attrs` for explanation of attrs
 
+=head3 $args
+
 $args can contain the following special arguments:
 
 * WHERE - A text string containing a SQL "WHERE" clause (not begining with the word "WHERE",
           but everything that comes after that).
 * JOIN  - A text string containing one or more SQL "JOIN" clauses (beginning with the
           appropriate "JOIN", "LEFT JOIN", etc keywords).
+* INPUT - An arrayref of args that would be inserted into any passed-in WHERE statement.
 
 The following patterns can be used:
 
@@ -619,7 +645,8 @@ The following patterns can be used:
 
 * {field => \$value}
     * Translates to the string "field $value"
-    * Presumably $value contains an operator and a value. If so, that falue will need to have been appropriately quoted in the string
+    * Presumably $value contains an operator and a value. If so, that falue will need to have
+      been appropriately quoted in the string
 
 * {OR => {field1 => $value1, field2 => $value2}}
     * Both "AND" and "OR" are supported
@@ -638,14 +665,38 @@ The following patterns can be used:
     * Example: {field => {OR => [{'>' => 1}, {'<' => 5}]}}
     * The example would translate to the string "(field > 1 OR field < 5)"
 
+In any instance where "OR" or "AND" are used above, it is acceptable to use '-or' or '-and'
+instead.
+
+If the name of a field begins with the string 'me.', the 'me' will automatically be replaced
+with the name of the table being searched against.
+
+=head3 $attrs
+
+$attrs can contain any/all of three arguments:
+
+* limit    - Specify a maximum number of results you wish to have returned.
+* offset   - Skip returning the first X results.
+* order_by - Specify the order in which results can be returned.
+
+The 'order_by' argument must contain either a string or an array of strings. Each string
+must contain a field name and optionally a direction. Optionally, it may contain multiple
+fieldname/direction pairs, separated by commas. Directions must be "ASC" or "DESC". Examples:
+
+* field1
+* field1 DESC
+* field1, field2
+* field1 ASC, field2 DESC
+* field1, field2 DESC, field3 ASC
+
 =cut
 
 sub search {
 	my $invocant = shift;
 	my ($args, $attrs) = $invocant->_prep_args_multi(2, @_);
 
-	my $attrString = $invocant->_parse_query_attrs($attrs);
-	my $describe = $invocant->_describe;
+	my $fieldDetails = $invocant->_field_details;
+	my $attrString = $invocant->_parse_query_attrs($attrs, $fieldDetails);
 
 	my $table = $invocant->_table;
 
@@ -660,12 +711,12 @@ sub search {
 	my @input;
 	push @input, @{$args->{INPUT}} if $args->{INPUT};
 
-	$invocant->_parse_where_args(\@whereString, \@input, $describe, $args);
+	$invocant->_parse_where_args(\@whereString, \@input, $fieldDetails, $args);
 
 	$whereString = join ' AND ', @whereString;
 	$whereString = "WHERE $whereString" if $whereString;
 
-	my $fields = "$table." . join(", $table.", keys(%$describe));
+	my $fields = "$table." . join(", $table.", keys(%$fieldDetails));
 	my $query = qq/
 		SELECT $fields FROM $table
 		$joinString
@@ -750,14 +801,14 @@ sub update {
 		}
 	}
 
-	my $describe = $self->_describe;
+	my $fieldDetails = $self->_field_details;
 
 	my @sets;
 	my @bits;
 	foreach my $arg (keys %$args) {
-		if ($describe->{$arg}) {
+		if ($fieldDetails->{$arg}) {
 			push @sets, "$arg = ?";
-			if ($args->{$arg} && ref $args->{$arg} && $describe->{$arg}{Type} eq 'json') {
+			if ($args->{$arg} && ref $args->{$arg} && $fieldDetails->{$arg}{Type} eq 'json') {
 				$args->{$arg} = JSON::encode_json($args->{$arg});
 			}
 			push @bits, $args->{$arg};
@@ -801,8 +852,8 @@ sub refresh {
 	my $self = shift;
 
 	my $table    = $self->_table;
-	my $describe = $self->_describe;
-	my $fields   = join ', ', keys(%$describe);
+	my $fieldDetails = $self->_field_details;
+	my $fields   = join ', ', keys(%$fieldDetails);
 	my ($where, $pk_bits) = $self->_primary_key_where_clause;
 
 	my $query = qq/SELECT $fields FROM $table WHERE $where;/;
@@ -833,12 +884,12 @@ sub promote {
 
 sub asHashRef {
 	my $self = shift;
-	my $describe = $self->_describe();
+	my $fieldDetails = $self->_field_details();
 
 	my $hash = {};
-	foreach my $field (keys %$describe) {
+	foreach my $field (keys %$fieldDetails) {
 		my $val = $self->{$field};
-		if ($val && $describe->{$field}{Type} eq 'json') {
+		if ($val && $fieldDetails->{$field}{Type} eq 'json') {
 			$hash->{$field} = JSON::decode_json($val);
 		}
 		else {
