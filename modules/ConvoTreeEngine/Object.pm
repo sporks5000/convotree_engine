@@ -93,6 +93,49 @@ sub _prep_args_multi {
 	}
 }
 
+=head2 _baseClass and _dynamicSubclass
+
+Given a scenario where a class needs to be subclassed, these two methods can
+be subclassed in order to ensure that objects end up in the appropriate subclass.
+
+The '_baseClass' method should return the name of the lowest class from which
+code specific to that table is inherited.
+
+The '_dynamicSubclass' method expects to be passed the data from which we're
+going to create the object. It will assess that data and return an appropriate
+subclass.
+
+=cut
+
+sub _baseClass {}
+sub _dynamicSubclass {}
+
+=head2 __dynamicSubclass
+
+Given data that is to be blessed into an object, Check the class that it's to be
+blessed into to see if it should be subclassed. Continue to check the returned
+subclasses for further subclassing until either the same class is returned or
+nothing is returned.
+
+=cut
+
+sub __dynamicSubclass {
+	my $invocant = shift;
+	my $data     = shift;
+
+	my $class = Scalar::Util::blessed($invocant) || $invocant;
+
+	$class = $class->_baseClass || $class;
+	my $newClass = '';
+	while ($newClass ne $class) {
+		ConvoTreeEngine::Utils->require($class);
+		$newClass = $class;
+		$class = $class->_dynamicSubclass($data) || $class;
+	}
+
+	return $class;
+}
+
 sub createAccessors {
 	my $class  = shift;
 	my @fields = @_;
@@ -252,8 +295,8 @@ sub createRelationships {
 		ConvoTreeEngine::Utils->require($otherClass);
 
 		$rel->{fields} = {$rel->{fields} => $rel->{fields}} unless ref $rel->{fields};
-		if ($rel->{order_by} && !ref $rel->{order_by}) {
-			$rel->{order_by} = [$rel->{order_by}];
+		if ($rel->{order_by}) {
+			$rel->{order_by} = ConvoTreeEngine::Utils->convert_to_array($rel->{order_by});
 		}
 
 		if ($rel->{join}) {
@@ -302,7 +345,7 @@ sub createRelationships {
 			my $whereString;
 			my @whereString;
 			if ($args->{WHERE}) {
-				$args->{WHERE} = [$args->{WHERE}] unless ref $args->{WHERE};
+				$args->{WHERE} = ConvoTreeEngine::Utils->convert_to_array($args->{WHERE});
 				foreach my $where (@{$args->{WHERE}}) {
 					push @whereString, $where;
 				}
@@ -332,15 +375,11 @@ sub createRelationships {
 
 				$args = $self->$mutate($args);
 				if ($rel->{order_by}) {
-					if ($attrs->{order_by}) {
-						$attrs->{order_by} = [$attrs->{order_by}] unless ref $attrs->{order_by};
-						push @{$attrs->{order_by}}, @{$rel->{order_by}}
-					}
-					else {
-						$attrs->{order_by} = $rel->{order_by};
-					}
+					### We're going to mutate attrs, so do a shallow clone of them
+					$attrs = {map {$_ => $attrs->{$_}} keys %$attrs};
+
+					$attrs->{order_by} = ConvoTreeEngine::Utils->convert_to_array($attrs->{order_by}, $rel->{order_by});
 				}
-				$attrs->{order_by} ||= $rel->{order_by};
 
 				return $otherClass->search($args, $attrs);
 			};
@@ -360,14 +399,11 @@ sub createRelationships {
 	return;
 }
 
-##### TODO: Rethink how subclassing works
-sub _dynamicSubclass {return shift;}
-
 sub create {
 	my $class = shift;
 	my $args  = $class->_prep_args(@_);
 
-	my $self = $class->promote({});
+	my $objData = {};
 
 	my $fieldDetails = $class->_field_details;
 
@@ -380,7 +416,7 @@ sub create {
 				$args->{$field} = JSON::encode_json($args->{$field});
 			}
 			push @values, $args->{$field};
-			$self->{$field} = delete $args->{$field};
+			$objData->{$field} = delete $args->{$field};
 		}
 	}
 	if (keys %$args) {
@@ -394,14 +430,13 @@ sub create {
 
 	if ($fieldDetails->{id} && ($fieldDetails->{id}{Key} || '') eq 'PRI') {
 		my $id = $class->_mysql->insertForId(qq/INSERT INTO $table($fields) VALUES($questionmarks);/, [@values]);
-
-		$self->{id} = $id;
+		$objData->{id} = $id;
 	}
 	else {
 		$class->_mysql->doQuery(qq/INSERT INTO $table($fields) VALUES($questionmarks);/, [@values]);
 	}
 
-	return $self->_dynamicSubclass;
+	return $class->promote($objData);
 }
 
 sub _parse_query_attrs {
@@ -417,7 +452,7 @@ sub _parse_query_attrs {
 	$attrs = {map {$_ => $attrs->{$_}} keys %$attrs};
 
 	if (defined $attrs->{order_by}) {
-		$attrs->{order_by} = [$attrs->{order_by}] unless ref($attrs->{order_by} || '') eq 'ARRAY';
+		$attrs->{order_by} = ConvoTreeEngine::Utils->convert_to_array($attrs->{order_by});
 		my @order;
 		foreach my $order (@{$attrs->{order_by}}) {
 			if ((ref $order || '') eq 'SCALAR') {
@@ -766,15 +801,29 @@ $attrs can contain any/all of three arguments:
 * offset   - Skip returning the first X results.
 * order_by - Specify the order in which results can be returned.
 
-The 'order_by' argument must contain either a string or an array of strings. Each string
-must contain a field name and optionally a direction. Optionally, it may contain multiple
-fieldname/direction pairs, separated by commas. Directions must be "ASC" or "DESC". Examples:
+The 'order_by' argument must contain either a string of text or a scalarref, or an an array
+of strings or scalarrefs. Each scalarref will be interpreted exactly as written. Each
+string must contain a field name and optionally a direction. Optionally, it may contain
+multiple fieldname/direction pairs, separated by commas. Directions must be "ASC" or "DESC".
 
-* field1
-* field1 DESC
-* field1, field2
-* field1 ASC, field2 DESC
-* field1, field2 DESC, field3 ASC
+Examples:
+
+* {order_by => 'field1'}
+    * Interpreted as 'ORDER BY table_name.field1'
+* {order_by => 'other_table_name.field1'}
+    * Interpreted as 'ORDER BY other_table_name.field1'
+* {order_by => 'field1 DESC'}
+    * Interpreted as 'ORDER BY table_name.field1 DESC'
+* {order_by => 'field1, field2'}
+    * Interpreted as 'ORDER BY table_name.field1, table_name.field2'
+* {order_by => 'field1 ASC, field2 DESC'}
+    * Interpreted as 'ORDER BY table_name.field1 ASC, table_name.field2 DESC'
+* {order_by => 'field1, field2 DESC, field3 ASC'}
+    * Interpreted as 'ORDER BY table_name.field1, table_name.field2 DESC, table_name.field3 ASC'
+* {order_By => ['field1', 'field2 DESC']}
+    * Interpreted as 'ORDER BY table_name.field1, table_name.field2 DESC'
+* {order_By => ['field1', \'table_name.field2 + field3 DESC']}
+    * Interpreted as 'ORDER BY table_name.field1, table_name.field2 + field3 DESC'
 
 =cut
 
@@ -798,7 +847,7 @@ sub search {
 	my $whereString;
 	my @whereString;
 	if ($args->{WHERE}) {
-		$args->{WHERE} = [$args->{WHERE}] unless ref $args->{WHERE};
+		$args->{WHERE} = ConvoTreeEngine::Utils->convert_to_array($args->{WHERE});
 		foreach my $where (@{$args->{WHERE}}) {
 			push @whereString, $where;
 		}
@@ -944,7 +993,7 @@ sub delete {
 }
 
 sub refresh {
-	my $self = shift;
+	my ($self) = @_;
 
 	my $table    = $self->_table;
 	my $fieldDetails = $self->_field_details;
@@ -955,10 +1004,13 @@ sub refresh {
 	my $rows = $self->_mysql->fetchRows($query, $pk_bits);
 	if (@$rows) {
 		my $found = $rows->[0];
-		%$self = %$found;
+		$_[0] = $self->promote($found);
+	}
+	else {
+		$_[0] = undef;
 	}
 
-	return $self;
+	return $_[0];
 }
 
 sub all {
@@ -970,10 +1022,11 @@ sub all {
 
 sub promote {
 	my $invocant = $_[0];
-	my $class = ref($invocant) || $invocant;
+	my $class = Scalar::Util::blessed($invocant) || $invocant;
 
-	my $new = bless $_[1], $class;
-	$_[1] = $new->_dynamicSubclass;
+	my $objClass = $class->__dynamicSubclass($_[1]);
+
+	$_[1] = bless $_[1], $objClass;
 	return $_[1];
 }
 
