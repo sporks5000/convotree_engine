@@ -6,9 +6,9 @@ package ConvoTreeEngine::Utils;
 
 	no strict 'refs';
 	sub require {
-		my ($invocant, $class, %opts) = @_;
+		my ($invocant, $class) = @_;
 
-		return if ($CLASS_LOADED{$class} && !$opts{force});
+		return if ($CLASS_LOADED{$class});
 
 		no warnings 'once';
 		eval "require $class";

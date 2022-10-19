@@ -252,6 +252,9 @@ sub createRelationships {
 		ConvoTreeEngine::Utils->require($otherClass);
 
 		$rel->{fields} = {$rel->{fields} => $rel->{fields}} unless ref $rel->{fields};
+		if ($rel->{order_by} && !ref $rel->{order_by}) {
+			$rel->{order_by} = [$rel->{order_by}];
+		}
 
 		if ($rel->{join}) {
 			my $ref = ref $rel->{join} || '';
@@ -286,14 +289,24 @@ sub createRelationships {
 			foreach my $otherField (keys %{$rel->{fields}}) {
 				my $selfMethod = $rel->{fields}{$otherField};
 				my $value = $getValue->($self, $selfMethod);
-				$args2->{$otherField} = $value;
+				if ($otherField eq 'DISTINCT') {
+					$args->{DISTINCT} = $value;
+				}
+				else {
+					$args2->{$otherField} = $value;
+				}
 			}
 
 			my $fieldDetails = $otherClass->_field_details;
 
 			my $whereString;
 			my @whereString;
-			push @whereString, $args->{WHERE} if $args->{WHERE};
+			if ($args->{WHERE}) {
+				$args->{WHERE} = [$args->{WHERE}] unless ref $args->{WHERE};
+				foreach my $where (@{$args->{WHERE}}) {
+					push @whereString, $where;
+				}
+			}
 			my @input;
 			push @input, @{$args->{INPUT}} if $args->{INPUT};
 
@@ -318,6 +331,15 @@ sub createRelationships {
 				my ($args, $attrs) = $class->_prep_args_multi(2, @_);
 
 				$args = $self->$mutate($args);
+				if ($rel->{order_by}) {
+					if ($attrs->{order_by}) {
+						$attrs->{order_by} = [$attrs->{order_by}] unless ref $attrs->{order_by};
+						push @{$attrs->{order_by}}, @{$rel->{order_by}}
+					}
+					else {
+						$attrs->{order_by} = $rel->{order_by};
+					}
+				}
 				$attrs->{order_by} ||= $rel->{order_by};
 
 				return $otherClass->search($args, $attrs);
@@ -398,6 +420,10 @@ sub _parse_query_attrs {
 		$attrs->{order_by} = [$attrs->{order_by}] unless ref($attrs->{order_by} || '') eq 'ARRAY';
 		my @order;
 		foreach my $order (@{$attrs->{order_by}}) {
+			if ((ref $order || '') eq 'SCALAR') {
+				push @order, $$order;
+				next;
+			}
 			my @fields = split m/\s*,\s*/, $order;
 			foreach my $f (@fields) {
 				my ($field, $direction) = split m/\s+/, $f, 2;
@@ -453,7 +479,7 @@ sub _parse_where_args {
 
 	### We're going to mutate args, so do a shallow clone of them
 	$args = {map {$_ => $args->{$_}} keys %$args};
-	delete @{$args}{qw/WHERE JOIN INPUT/};
+	delete @{$args}{qw/WHERE JOIN INPUT DISTINCT/};
 
 	my $table = $invocant->_table;
 	foreach my $field (keys %$args) {
@@ -594,6 +620,64 @@ sub _parse_where_args {
 	return;
 }
 
+=head2 _parseJoin
+
+Parse the given join statement and make sure that we're not joining anything twice.
+
+=cut
+
+sub _parseJoin {
+	my $invocant = shift;
+	my $join     = shift;
+
+	my $myTable = $invocant->_table;
+
+	$join =~ s/\s+/ /g;
+	my $joinOriginal = $join;
+	my %joins;
+	while ($join) {
+		my ($type, $table, $alias, $clause);
+		### Regex encased in curly brackets so that the $1, $2 etc. variables don't escape
+		{
+			$join =~ m/^\s*((((natural\s+)?((left|right|full)(\s+outer)?|inner)|cross)\s+)?join)/i;
+			$type = $1;
+		}
+
+		unless ($type) {
+			die "Unable to parse join statement:\n$join\n";
+		}
+
+		$join =~ s/^\s*$type\s//;
+		my $keep = $join;
+		{
+			$keep =~ s/\s+(((natural\s)?((left|right|full)(\souter)?|inner)|cross)\s)?join\s.*$//i;
+		}
+
+		{
+			$keep =~ m/^([A-Za-z0-9_]+)\s(([A-Za-z0-9_]+)\s)?((ON|USING)(\s|\().*)$/i;
+			$table  = $1;
+			$alias  = $3 || $table;
+			$clause = $4;
+		}
+
+		unless ($table && $clause) {
+			die "Unable to parse join statement:\n$type $keep\n";
+		}
+
+		if ($joins{$alias}) {
+			die "Joined to table or alias '$alias' more than once in statement:\n$joinOriginal\n";
+		}
+		if ($alias eq $myTable) {
+			die "Joined back to original table '$myTable' without an alias in statement:\n$joinOriginal\n";
+		}
+		$joins{$alias} = 1;
+
+		$join =~ s/^\s*$keep\s*//;
+	}
+
+	return;
+}
+
 =head2 search
 
 Compose a query string, Make the query, return the results.
@@ -604,11 +688,14 @@ Expects two arguments, $args and $attrs. See `_parse_query_attrs` for explanatio
 
 $args can contain the following special arguments:
 
-* WHERE - A text string containing a SQL "WHERE" clause (not begining with the word "WHERE",
-          but everything that comes after that).
-* JOIN  - A text string containing one or more SQL "JOIN" clauses (beginning with the
-          appropriate "JOIN", "LEFT JOIN", etc keywords).
-* INPUT - An arrayref of args that would be inserted into any passed-in WHERE statement.
+* WHERE    - A text string (or an array of text strings) containing a SQL "WHERE" clause (not
+             begining with the word "WHERE", but everything that comes after that). This will
+             be prepended with an "AND" to any where string that's generated from the other
+             passed-in arguments.
+* JOIN     - A text string containing one or more SQL "JOIN" clauses (beginning with the
+             appropriate "JOIN", "LEFT JOIN", etc keywords).
+* INPUT    - An arrayref of args that would be inserted into any passed-in WHERE statement.
+* DISTINCT - Boolean; indicates that we're doing a 'SELECT DISTINCT' rather than just a 'SELECT'
 
 The following patterns can be used:
 
@@ -704,10 +791,18 @@ sub search {
 	if ($args->{JOIN}) {
 		$joinString = $args->{JOIN};
 	}
+	$invocant->_parseJoin($joinString) if $joinString;
+
+	my $distinct = $args->{DISTINCT} ? ' DISTINCT' : '';
 
 	my $whereString;
 	my @whereString;
-	push @whereString, $args->{WHERE} if $args->{WHERE};
+	if ($args->{WHERE}) {
+		$args->{WHERE} = [$args->{WHERE}] unless ref $args->{WHERE};
+		foreach my $where (@{$args->{WHERE}}) {
+			push @whereString, $where;
+		}
+	}
 	my @input;
 	push @input, @{$args->{INPUT}} if $args->{INPUT};
 
@@ -718,7 +813,7 @@ sub search {
 
 	my $fields = "$table." . join(", $table.", keys(%$fieldDetails));
 	my $query = qq/
-		SELECT $fields FROM $table
+		SELECT$distinct $fields FROM $table
 		$joinString
 		$whereString
 		$attrString
