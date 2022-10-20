@@ -136,20 +136,19 @@ sub __dynamicSubclass {
 	return $class;
 }
 
+=head2 createAccessors
+
+Given a list of field names, assume that the class represents a hashref object where each
+field name is a key on that object and create a method for each field name where the value
+of that key is returned.
+
+Because objects from this class are DB-backed, we want to route all updates through the
+'update' method, so only create accessors as read only.
+
+=cut
+
 sub createAccessors {
-	my $class  = shift;
-	my @fields = @_;
-
-	foreach my $field (@fields) {
-		my $symbol_name = "${class}::$field";
-		no strict 'refs';
-		next if defined *{$symbol_name};
-		*{$symbol_name} = sub {
-			return shift->{$field};
-		};
-	}
-
-	return;
+	return ConvoTreeEngine::Utils->createROAccessors(@_);
 }
 
 =head2 createRelationships
@@ -595,12 +594,13 @@ sub _parse_where_args {
 			foreach my $key (keys %{$args->{$field}}) {
 				### Allowing multiple keys is useful if we want to search for greater than one value and less than another
 				my $value = $args->{$field}{$key};
+				my $ref = ref $value || '';
 				if (!defined $value) {
 					$key = 'IS' if $key eq '=';
 					$key = 'IS NOT' if $key eq '!=';
 					push @$whereString, "$field $key NULL";
 				}
-				elsif ((ref $value || '') eq 'ARRAY') {
+				elsif ($ref eq 'ARRAY') {
 					if ($key =~ m/^-?(AND|OR)$/i) {
 						my @nestedWhereString;
 						foreach my $val (@$value) {
@@ -631,6 +631,9 @@ sub _parse_where_args {
 							}
 						}
 					}
+				}
+				elsif ($ref eq 'SCALAR') {
+					push @$whereString, "$field $key $value";
 				}
 				else {
 					push @$whereString, "$field $key ?";
@@ -765,6 +768,13 @@ The following patterns can be used:
     * Useful for the "LIKE" operator
     * See above for other details
 
+* {field => {$operator => \'value'}}
+    * Assuming the operator was "=", this would translate to the string "field = value" without
+      quotes around "value".
+    * Useful for instances where you're comparing the contents of two columns
+        * Example: {start_date => {'>' => \'end_date'}}
+        * Becomes: 'start_date > end_date'
+
 * {field => \$value}
     * Translates to the string "field $value"
     * Presumably $value contains an operator and a value. If so, that falue will need to have
@@ -792,6 +802,10 @@ instead.
 
 If the name of a field begins with the string 'me.', the 'me' will automatically be replaced
 with the name of the table being searched against.
+
+If the name of a field is the name of a column on the table, that field will automatically
+be prerended with the table name. I.E. {field => 1} will become the string 'table.field = 1'.
+Note that this does not apply to strings within scalar references.
 
 =head3 $attrs
 
@@ -941,7 +955,7 @@ sub update {
 			ConvoTreeEngine::Exception::Input->throw(
 				error => "The '$field' field cannot be updated on the '" . ref $self . "' object",
 				args  => $args,
-			) if (defined $args->{$field} xor defined $self->$field()) || (defined $args->{$field} && $args->{$field} ne $self->$field());
+			) unless ConvoTreeEngine::Utils->compare($args->{$field}, $self->$field());
 		}
 	}
 

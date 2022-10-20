@@ -74,3 +74,5 @@ print Data::Dumper::Dumper($elements);
 $elements = ConvoTreeEngine::Object::Element->searchWithNested(\@ids);
 ### Verify that a namecat works
 $elements = ConvoTreeEngine::Object::Element->searchWithNested('type tests:test series');
+
+##### TODO: Need to test update functionality here
