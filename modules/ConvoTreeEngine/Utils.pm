@@ -6,9 +6,8 @@ package ConvoTreeEngine::Utils;
 
 	no strict 'refs';
 	sub require {
-		if ($_[0] && !ref $_[0] && $_[0] eq 'ConvoTreeEngine::Utils') {
-			shift;
-		}
+		### Allow calling this with or without object-oriented syntax
+		shift if @_ && !ref($_[0]) && ($_[0] // '') eq __PACKAGE__;
 		my ($class) = @_;
 
 		return if ($CLASS_LOADED{$class});
@@ -41,7 +40,8 @@ Given two values...
 =cut
 
 sub compare {
-	shift; ### ConvoTreeEngine::Utils class. We can ignore.
+	### Allow calling this with or without object-oriented syntax
+	shift if @_ && !ref($_[0]) && ($_[0] // '') eq __PACKAGE__;
 	my $arg1  = shift;
 	my $arg2  = shift;
 
@@ -79,7 +79,8 @@ to the original arrayref. If neither variable is defined, return an empty arrayr
 =cut
 
 sub convert_to_array {
-	shift; ### ConvoTreeEngine::Utils class. We can ignore.
+	### Allow calling this with or without object-oriented syntax
+	shift if @_ && !ref($_[0]) && ($_[0] // '') eq __PACKAGE__;
 	my $toConvert = shift;
 	my $toAdd     = shift;
 
@@ -112,7 +113,8 @@ of that key is returned.
 =cut
 
 sub createROAccessors {
-	shift; ### Unreasonable::Utils class. We can ignore.
+	### Allow calling this with or without object-oriented syntax
+	shift if @_ && !ref($_[0]) && ($_[0] // '') eq __PACKAGE__;
 	my $class  = shift;
 	my @fields = @_;
 
@@ -142,7 +144,8 @@ that update method when attempting to update the value of a key.
 =cut
 
 sub createRWAccessors {
-	shift; ### Unreasonable::Utils class. We can ignore.
+	### Allow calling this with or without object-oriented syntax
+	shift if @_ && !ref($_[0]) && ($_[0] // '') eq __PACKAGE__;
 	my $class  = shift;
 	my @fields = @_;
 
