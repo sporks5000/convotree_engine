@@ -44,7 +44,26 @@ our %examples = (
 				"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
 				"3" => 'The "prompt" key is optional. It contains a boolean value indicating whether to prompt before continuing',
 				"4" => 'The "stop" key is optional. It contain a boolean value indicating whether or not the flow of elements sshould stop after this point (identical to a "stop" block)',
-				"5" => 'For the text blocks, if the second string is null, a third string can include the name of a variable. the value of that variable will be displayed'
+				"5" => 'For the text blocks, if the second string is null, a third string can include the name of a variable. the value of that variable will be displayed',
+			},
+		},
+	},
+	item2    => {
+		text   => {
+			speaker => 'html classes'
+			text    => 'A string of text potentially including "quoted bits", _underscored bits_, *starred bits*, and [bracketed bits].'
+			classes => 'html classes'
+		},
+		delay  => '1000',
+		prompt => JSON::false,
+		stop   => JSON::false,
+		arbit  => {
+			"Additional details" => {
+				"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
+				"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
+				"3" => 'The "prompt" key is optional. It contains a boolean value indicating whether to prompt before continuing',
+				"4" => 'The "stop" key is optional. It contain a boolean value indicating whether or not the flow of elements sshould stop after this point (identical to a "stop" block)',
+				"5" => 'If the "text" key is given a hashref, the text in it will be parsed. Quoted bits will be put into a span and given the classes specified under "speaker", underscored bits will be italicized, starred bits will be bolded, and text within bracketed bits will be interpreted as a variable name, and replaced with the value of that variable',
 			},
 		},
 	},
@@ -62,7 +81,7 @@ our %examples = (
 				"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 				"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
 				"3" => 'The "prompt" key is optional. It contains a boolean value indicating whether to prompt before continuing',
-				"4" => 'The "stop" key is optional. It contain a boolean value indicating whether or not the flow of elements sshould stop after this point (identical to a "stop" block)',
+				"4" => 'The "stop" key is optional. It contain a boolean value indicating whether or not the flow of elements should stop after this point (identical to a "stop" block)',
 			},
 		},
 	},

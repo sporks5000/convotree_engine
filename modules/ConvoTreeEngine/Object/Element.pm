@@ -362,26 +362,23 @@ sub searchWithNested_hashRefs {
 		}
 		return 1;
 	};
+	my $itemHash = sub {
+		my ($class, $value) = @_;
+		return $class->_validate_value($value, {
+			speaker => [0, 'words'],
+			text    => [1, 'string'],
+			classes => [0, 'words'],
+		}, 'hashOf');
+	};
 	my $singleElement = sub {
-		### Return true if the valus has the structure of a single element
+		### Return true if the value has the structure of a single element
 		my ($class, $value, $type) = @_;
 		$type ||= $value->{type};
 		return 0 unless $type;
 		return 0 unless $typeValidation{$type};
-		return 0 unless (ref $value || '') eq 'HASH';
-		foreach my $key (keys %$value) {
-			next if $key eq 'type';
-			return 0 unless $typeValidation{$type}{$key};
-		}
-		foreach my $key (keys %{$typeValidation{$type}}) {
-			next unless $typeValidation{$type}{$key}[0] && exists $value->{$key};
-			return 0 if !exists $value->{$key};
-			### Make sure it passes validation for that element type
-			my @args = ($value->{$key}, $typeValidation{$type}{$key}[1]);
-			push @args, $typeValidation{$type}{$key}[2] if scalar @{$typeValidation{$type}{$key}} > 2;
-			return 0 unless $class->_validate_value(@args);
-		}
-		return 1;
+		### Make sure that we'r eignoring type, if present
+		local $typeValidation{$type}{type} ||= [0, 'ignore'];
+		return $class->_validate_value($value, $typeValidation{$type}, 'hashOf');
 	};
 	my $conditionString = sub {
 		### A string of text, potentially of multiple parts separated with and/or operators ('&' or '|')
@@ -473,6 +470,45 @@ sub searchWithNested_hashRefs {
 		}
 		return 1;
 	};
+	my $hashOf = sub {
+		my ($class, $value, @patterns) = @_;
+		return 0 unless $class->_validate_value($value, 'hash');
+		return 0 unless @patterns;
+		my %flags;
+		if (!ref $patterns[-1]) {
+			my $flags = shift @patterns;
+			return 0 unless @patterns;
+			%flags = map {$_ => 1} split m/\s*,\s*/, $flags;
+		}
+		my $match = 0;
+		PATTERN:
+		foreach my $pattern (@patterns) {
+			next PATTERN unless $class->_validate_value($pattern, 'hash');
+			unless ($flags{keep_extra}) {
+				### Fail out if there are extra keys
+				foreach my $key (keys %$value) {
+					next PATTERN unless $pattern->{$key};
+				}
+			}
+			KEY:
+			foreach my $key (keys %$pattern) {
+				next PATTERN unless $class->_validate_value($pattern->{$key}, 'array');
+				### If it's not present and not required, that's fine
+				next KEY unless $pattern->{$key}[0] && exists $value->{$key};
+				next PATTERN unless exists $value->{$key};
+				### Make sure it passes validation for that element type
+				my $validation = $pattern->{$key}[1];
+				my @args = ($value->{$key});
+				if (scalar @{$pattern->{$key}} > 2) {
+					push @args, @{$pattern->{$key}}[2..$#{$pattern->{$key}}];
+				}
+				next PATTERN unless $class->_validate_value(@args, $validation);
+			}
+			$match = 1;
+			last PATTERN;
+		}
+		return $match
+	};
 
 	my %validations = (
 		ignore          => $ignore,
@@ -488,16 +524,27 @@ sub searchWithNested_hashRefs {
 		number          => $number,
 		namecat         => $namecat,
 		itemBlock       => $itemBlock,
+		itemHash        => $itemHash,
 		singleElement   => $singleElement,
 		conditionString => $conditionString,
 		singleCondition => $singleCondition,
 		variableUpdates => $variableUpdates,
 		choice          => $choice,
+		arrayOf         => $arrayOf,
+		hashOf          => $hashOf,
 	);
+
+=head2 typeValidation
+
+A hashref of element types. For each type, there will be a hashref of key/value pairs in that type. The
+value will be an array with two elements - Boolean representing if it's required, and eith a string or
+an array of strings indicating validators for what can be present.
+
+=cut
 
 	%typeValidation = (
 		item     => {
-			text   => [1, 'arrayOf(itemBlock)'],
+			text   => [1, ['arrayOf(itemBlock)', 'itemHash']],
 			delay  => [0, 'positiveInt'],
 			prompt => [0, 'boolean'],
 			stop   => [0, 'boolean'],
@@ -573,6 +620,13 @@ sub searchWithNested_hashRefs {
 		},
 	);
 
+=head2 _validate_json
+
+Given either a JSON blob or a hashref, and an element type, validate that the data given matches that
+type.
+
+=cut
+
 	sub _validate_json {
 		my $invocant = shift;
 		my $json     = shift;
@@ -595,6 +649,47 @@ sub searchWithNested_hashRefs {
 
 		return JSON::encode_json($json);
 	}
+
+=head2 _validate_value
+
+Validate that a value is valid for the details given
+
+=head3 Arguments
+
+* The value we're validating.
+* An array of additional arguments for that validator.
+* The validation that we're validating against OR an arrayref of multiple acceptable validations to
+  validate against.
+
+Most validation subroutines only require a single argument to be passed in - the value itself. Some
+however require more details in order to be validated correctly. Examples:
+
+    ### Returns true because the value passed is a positive integer.
+    my $isValid = ConvoTreeEngine::Object::Element->_validate_value('23', 'positiveInt');
+
+    ### This will return true because it will validate as an element of the "note" type.
+    my $isValid = ConvoTreeEngine::Object::Element->_validate_value({
+        note  => 'This is a note',
+        arbit => 'Arbitrary data',
+    }, 'note', 'singleElement');
+
+    ### Both of these will return true because the value is an array containing values that are either
+    ### positive integers or strings.
+    my $isValid = ConvoTreeEngine::Object::Element->_validate_value(
+        ['23', 'taco'],
+        'arrayOf(positiveInt,string)',
+    );
+    my $isValid = ConvoTreeEngine::Object::Element->_validate_value(
+        ['23', 'taco'],
+        'positiveInt',
+        'string',
+        'arrayOf',
+    );
+
+    ### This will return true because the value being passed is either a positive integer or a hashref.
+    my $isValid = ConvoTreeEngine::Object::Element->_validate_value('23', ['positiveInt', 'hash']);
+
+=cut
 
 	my @failures;
 	my $nested = 0;
