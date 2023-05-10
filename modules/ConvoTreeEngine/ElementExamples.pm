@@ -5,7 +5,9 @@ use warnings;
 
 use JSON;
 
-our %examples = (
+#======================#
+#== Element Examples ==#
+#======================#
 
 =head2 item
 
@@ -14,6 +16,7 @@ to the user.
 
 =cut
 
+our %examples = (
 	item     => {
 		text   => [
 			[
@@ -157,7 +160,8 @@ Ifs represent a place where the story is able to fork in different directions ba
 				"4.c" => 'The value must contain only letters, numbers, and underscores',
 				"4.d" => 'If there are multiple sets within within the first string, they will be separated by and ("&") or or ("|") operators',
 				"5" => 'The second string (if present) will contain either a single positive integer (representing a single element ID) or an array of positive integers',
-				"6" => 'These nested arrays will be processed in order until one of them returns true',
+				"6" => 'These nested arrays will be processed in order until one of them returns true. At that point, we will follow the path specified by the second value (if any)',
+				"6.a" => 'And further condition arrays will be ignored',
 				"7" => 'If the first element within a nested array is null, it will be interpreted as returning true',
 			},
 		},
@@ -282,6 +286,9 @@ is the potential for choices to be unavialable based on the values of various va
 				"2.g" => '"classesx" is the classes that will be used to display the option if not available',
 				"2.h" => '"textx" is alternative text to display if the option is not available',
 				"2.i" => '"hoverx", is alternative hover text to display if the option is not available',
+				"2.j" => '"function" is the name of a function that will be run to generate the display for the choice. This will take precidence over "text" if present',
+				"2.j.1" => 'The entire condition hash will be passed intot he function as the first and only argument',
+				"2.k" => '"arbit" is arbitrary data. The creator can use it for functions, if desired.',
 				"2.j" => '"then" is the element or an array of elements that will follow if this option is chosen',
 				"3" => 'These choices will be displayed to the user in the order given',
 			},
@@ -374,5 +381,88 @@ Serieses are a list of consecutive elements, and potentially a list of other rel
 		},
 	},
 );
+
+#=======================#
+#== Condition Strings ==#
+#=======================#
+
+=head2 Basic Conditions
+
+Basic conditions contain a variable, an operator, and a condition. For example...
+
+    var=1
+
+...indicates that the value stored int he variable name "var" must be equal to the number or string "1"
+
+The available operators are as follows:
+
+* =  - Indicaes number or string equivalence
+* != - Indicates number or string inequivolence
+* >= - Indicates that the number is greater than or equal to
+* <= - Indicates that the number is lesser than or equal to
+* >  - Indicates that the number is greater than
+* <  - Indicates that the number is lesser than
+
+=head2 Seen
+
+"Seen" conditions are true or false based on whether an element has been seen. Elements can be referred
+to by their ID or their namecat. For example...
+
+    seen:23
+
+...would return true if the user has seen the element with ID 23
+
+"Seen" conditions can begin with an exclamation point. This indicates that we're checking if the element
+has NOT been seen.
+
+=head2 Function
+
+"Function" conditions run a javascript function and return true or false based on whether that function
+returned true or false. They can begin with an exclamation point, meaning that we're checking for the
+option of what the function returns.
+
+=head2 First
+
+"First" conditions are ONLY applicable in "choice" blocks. They return true in a circumstance where none
+of the previous conditions have returned true. They can begin with an exclamation point, meaning that
+they return true only if there have been other conditions that have returned true.
+
+=head2 "And" and "Or" operators
+
+Multiple conditions can be separated by the "&" (and) and "|" (or) operator. The "or" operator takes percidence over the "and" operator, so...
+
+    var1>1&var2>1|var1>3
+
+...would be true either if var1 and var2 are grearer than 1, or if var1 is greater than 3
+
+=cut
+
+#======================#
+#== Condition Blocks ==#
+#======================#
+
+=head2 Condition Blocks
+
+Condition blocks are hashrefs that contain one or more of the following keys:
+
+* and
+* or
+* xor
+
+If a condition block contains more than one of the above keys, it only returns true if ALL of them return true
+
+=head3 and
+
+And blocks can contain a condition string, a condition block, or an array of conditions strings/blocks. They return true if all of the conditions within return true
+
+=head3 or
+
+Or blocks can contain a condition string, a condition block, or an array of conditions strings/blocks. They return true if at least one of the conditions within returns reuw
+
+=head3 xor
+
+Xor blocks can contain a condition string, a condition block, or an array of conditions strings/blocks. They return true if only one of the conditions within returns true
+
+=cut
 
 1;

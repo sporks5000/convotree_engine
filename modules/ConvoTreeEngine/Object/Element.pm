@@ -404,7 +404,7 @@ sub searchWithNested_hashRefs {
 				next;
 			}
 			elsif ($part =~ m/^!?first\z/) {
-				### A part can be the word "first" indicating that this no option previous to this one has returned true
+				### A part can be the word "first" indicating that no options previous to this one have returned true
 				next;
 			}
 			### Each part contains a variable name, an operator, and a condition
@@ -427,12 +427,22 @@ sub searchWithNested_hashRefs {
 		}
 		return 1;
 	};
+	my $conditionBlock = sub {
+		my ($class, $value) = @_;
+		return 0 unless $class->_validate_value($value, 'hashOf', {
+			and => [0, ['conditionString', 'conditionBlock', 'arrayOf(conditionString,conditionBlock)']],
+			or  => [0, ['conditionString', 'conditionBlock', 'arrayOf(conditionString,conditionBlock)']],
+			xor => [0, ['conditionString', 'conditionBlock', 'arrayOf(conditionString,conditionBlock)']],
+		});
+		### Make sur eit contains at least one of the above keys
+		return 1 unless scalar keys %$value == 0;
+	};
 	my $singleCondition = sub {
 		### the value will be an array
 		my ($class, $value) = @_;
 		return 0 unless $class->_validate_value($value, 'array');
 		### The first element will either be undefined or a condition string
-		return 0 if defined $value->[0] && !$class->_validate_value($value->[0], 'conditionString');
+		return 0 if defined $value->[0] && !$class->_validate_value($value->[0], ['conditionString', 'conditionBlock']);
 		return 0 if @$value > 2;
 		return 1 unless @$value == 2;
 		### If the second element is present, it should be an element ID or an array of element IDs
@@ -452,17 +462,18 @@ sub searchWithNested_hashRefs {
 	};
 	my $choice = sub {
 		my ($class, $value) = @_;
-		return 0 unless defined $value;
 		return $class->_validate_value($value, 'hashOf', {
-			cond     => [0, ['undefined', 'conditionString']],
+			cond     => [0, ['undefined', 'conditionString', 'conditionBlock']],
 			text     => [1, 'string'],
 			hover    => [0, 'string'],
 			speaker  => [0, 'words'],
-			speaker  => [0, 'words'],
-			showx    => [0, ['undefined', 'conditionString']],
-			speaker  => [0, 'words'],
+			classes  => [0, 'words'],
+			showx    => [0, ['undefined', 'conditionString', 'conditionBlock']],
+			classesx => [0, 'words'],
 			textx    => [0, 'string'],
-			speaker  => [0, 'words'],
+			hoverx   => [0, 'words'],
+			function => [0, 'word'],
+			arbit    => [0, 'ignore'],
 			then     => [0, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
 		});
 	};
@@ -532,6 +543,7 @@ sub searchWithNested_hashRefs {
 		itemHash        => $itemHash,
 		singleElement   => $singleElement,
 		conditionString => $conditionString,
+		conditionBlock  => $conditionBlock,
 		singleCondition => $singleCondition,
 		variableUpdates => $variableUpdates,
 		choice          => $choice,
