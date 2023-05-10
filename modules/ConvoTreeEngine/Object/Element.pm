@@ -403,9 +403,19 @@ sub searchWithNested_hashRefs {
 		my @parts = split m/\s*[&|]\s*/, $valueMod;
 		foreach my $part (@parts) {
 			### Put the quoted bits back
-			while ($part =~ m/'''/) {
-				my $quoted = shift @quoted;
-				$part =~ s/'''/\Q$quoted\E/;
+			my $quoted_count = $part =~ m/'''/g;
+			if ($quoted_count) {
+				my @pieces = split m/'''/, $part;
+				if (@pieces == $quoted_count) {
+					push @pieces, '';
+				}
+				if ($part =~ m/^'''/) {
+					unshift @pieces, '';
+				}
+				$part = shift @pieces;
+				while (@pieces) {
+					$part .= shift(@quoted) . shift(@pieces);
+				}
 			}
 			if ($part =~ m/^!?seen:(.*)$/i) {
 				### A part can also be the string "seen:" followed by an identifier for an element (indicating that that element has already been seen by the user)
