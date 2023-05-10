@@ -252,6 +252,14 @@ sub searchWithNested_hashRefs {
 
 {
 	my %typeValidation;
+	my %regexValidation = (
+		variableName => qr/^[a-zA-Z0-9_.]+\z/,
+		words        => qr/^(?:[a-zA-Z0-9_]+[ -]?)+\b\z/,
+		word         => qr/^[a-zA-Z0-9_]+\z/,
+		string       => qr/^[^[:cntrl:]]*\z/,
+		positiveInt  => qr/^[1-9][0-9]*\z/,
+		number       => qr/^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z/,
+	);
 
 	my $ignore = sub {
 		### no validation necessary; always returns true
@@ -283,53 +291,44 @@ sub searchWithNested_hashRefs {
 		return 0 unless (ref $value || '') eq 'ARRAY';
 		return 1;
 	};
+	my $matches = sub {
+		my ($class, $value, $matchType) = @_;
+		return 0 unless defined $value;
+		return 0 if ref $value;
+		my $regex = $regexValidation{$matchType};
+		return 0 unless $regex;
+		return 1 if $value =~ m/$regex/;
+		return 0;
+	};
 	my $variableName = sub {
 		### Returns true if the value matches what we expect from a javascript variable name
 		my ($class, $value) = @_;
-		return 0 unless defined $value;
-		return 0 if ref $value;
-		return 0 if $value !~ m/^[a-zA-Z0-9_.]+\z/;
-		return 1;
+		return $class->_validate_value($value, 'matches', 'variableName');
 	};
 	my $words = sub {
 		### Returns true if the value is a string of words separated by either single spaces or single hyphens
 		my ($class, $value) = @_;
-		return 0 if !defined $value;
-		return 0 if ref $value;
-		return 0 if $value !~ m/^(?:[a-zA-Z0-9_]+[ -]?)+\b\z/;
-		return 1;
+		return $class->_validate_value($value, 'matches', 'words');
 	};
 	my $word = sub {
 		### Returns true if the value is a single word containg letters numbers and/or underscores
 		my ($class, $value) = @_;
-		return 0 if !defined $value;
-		return 0 if ref $value;
-		return 0 if $value !~ m/^[a-zA-Z0-9_]+\z/;
-		return 1;
+		return $class->_validate_value($value, 'matches', 'word');
 	};
 	my $string = sub {
 		### returns true if the value is a text string (which may be empty) without control characters
 		my ($class, $value) = @_;
-		return 0 if !defined $value;
-		return 0 if ref $value;
-		return 0 if $value !~ m/^[^[:cntrl:]]*\z/;
-		return 1;
+		return $class->_validate_value($value, 'matches', 'string');
 	};
 	my $positiveInt = sub {
 		### Returns true if the value looks like a positive integer
 		my ($class, $value) = @_;
-		return 0 if !defined $value;
-		return 0 if ref $value;
-		return 0 if $value !~ m/^[1-9][0-9]*|0\z/;
-		return 1;
+		return $class->_validate_value($value, 'matches', 'positiveInt');
 	};
 	my $number = sub {
 		### Returns true if the value looks like a logical number, either positive or negative, with or without decimal places
 		my ($class, $value) = @_;
-		return 0 if !defined $value;
-		return 0 if ref $value;
-		return 0 if $value !~ m/^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z/;
-		return 1;
+		return $class->_validate_value($value, 'matches', 'number');
 	},
 	my $namecat = sub {
 		### Returns true if the value looks like a namecat
@@ -569,6 +568,7 @@ sub searchWithNested_hashRefs {
 		boolean         => $boolean,
 		hash            => $hash,
 		array           => $array,
+		matches         => $matches,
 		variableName    => $variableName,
 		words           => $words,
 		word            => $word,
@@ -789,7 +789,11 @@ however require more details in order to be validated correctly. Examples:
 		}
 
 		my $displayValue = ref $value ? JSON::encode_json($value) : $value;
-		push @failures, "* Value(s) '" . $displayValue . "' did not meet validation(s) '" . join("', '", @$validation) . "'";
+		my $failure = "* Value(s) '" . $displayValue . "' did not meet validation(s) '" . join("', '", @$validation) . "'";
+		if (@additional) {
+			$failure .= " with additional args: '" . join("', '", @additional) . "'";
+		}
+		push @failures, $failure;
 
 		$nested--;
 		return $isValid;
