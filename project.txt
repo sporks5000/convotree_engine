@@ -148,23 +148,23 @@ Choices for the user:
 		{
 			type    => 'choice',
 			choices => [
-				[
-					undef, ### The first item is the condition. Null conditions are always shown to the user
-					'This might be my only option for what to say', ### The second is the text for the item. It will be interpreted as HTML
-					[ ### The third item is the result if this is the choice that the user makes
+				{
+					cond => undef,
+					text => 'This might be my only option for what to say',
+					then => [ ### The third item is the result if this is the choice that the user makes
 						### Note that the option that was selected will disappear, so you will probably want to represent it here
 						'<b>You:<\b> This might be my only option for what to say',
 						'<b>Robert:</b> That's exactly how I thought you'd respond!',
 					],
-				],
-				[
-					'var=2'
-					'This option will appear conditionally',
-					[
+				},
+				{
+					cond => 'var=2',
+					text => 'This option will appear conditionally',
+					then => [
 						'<b>You</b> This option will appear conditionally',
 						'<b>Robert:</b> Woah, I totally did not expect you to say that!',
 					],
-				],
+				},
 			],
 		},
 	]

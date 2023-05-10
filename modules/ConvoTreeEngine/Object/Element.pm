@@ -275,12 +275,12 @@ sub searchWithNested_hashRefs {
 	};
 	my $hash = sub {
 		my ($class, $value) = @_;
-		return 0 unless (ref $value || '' ) eq 'HASH';
+		return 0 unless (ref $value || '') eq 'HASH';
 		return 1;
 	};
 	my $array = sub {
 		my ($class, $value) = @_;
-		return 0 unless (ref $value || '' ) eq 'ARRAY';
+		return 0 unless (ref $value || '') eq 'ARRAY';
 		return 1;
 	};
 	my $variableName = sub {
@@ -373,10 +373,12 @@ sub searchWithNested_hashRefs {
 	my $singleElement = sub {
 		### Return true if the value has the structure of a single element
 		my ($class, $value, $type) = @_;
+		return 0 unless defined $value;
+		return 0 unless (ref $value || '') eq 'HASH';
 		$type ||= $value->{type};
 		return 0 unless $type;
 		return 0 unless $typeValidation{$type};
-		### Make sure that we'r eignoring type, if present
+		### Make sure that we're ignoring type, if present
 		local $typeValidation{$type}{type} ||= [0, 'ignore'];
 		return $class->_validate_value($value, 'hashOf', $typeValidation{$type});
 	};
@@ -451,15 +453,18 @@ sub searchWithNested_hashRefs {
 	my $choice = sub {
 		my ($class, $value) = @_;
 		return 0 unless defined $value;
-		return 0 unless $class->_validate_value($value, 'array');
-		### The first element will be a condition string
-		return 0 unless $class->_validate_value($value->[0], 'conditionString');
-		### The second element will be what we display for the choice
-		return 0 unless $class->_validate_value($value->[1], 'string');
-		next if @$value == 2;
-		return 0 if @$value > 3;
-		### If there is a third element, it should be an element ID or an array of element IDs
-		return 0 unless $class->_validate_value($value->[2], ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']);
+		return $class->_validate_value($value, 'hashOf', {
+			cond     => [0, ['undefined', 'conditionString']],
+			text     => [1, 'string'],
+			hover    => [0, 'string'],
+			speaker  => [0, 'words'],
+			speaker  => [0, 'words'],
+			showx    => [0, ['undefined', 'conditionString']],
+			speaker  => [0, 'words'],
+			textx    => [0, 'string'],
+			speaker  => [0, 'words'],
+			then     => [0, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
+		});
 	};
 	my $arrayOf = sub {
 		my ($class, $value, @patterns) = @_;
@@ -578,6 +583,7 @@ an array of strings indicating validators for what can be present.
 		},
 		assess   => {
 			cond  => [1, 'singleCondition'],
+			after => [0, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
 			arbit => [0, 'ignore'],
 		},
 		negate   => {
