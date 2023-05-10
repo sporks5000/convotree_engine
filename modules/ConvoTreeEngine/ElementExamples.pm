@@ -50,9 +50,9 @@ our %examples = (
 	},
 	item2    => {
 		text   => {
-			speaker => 'html classes'
-			text    => 'A string of text potentially including "quoted bits", _underscored bits_, *starred bits*, and [bracketed bits].'
-			classes => 'html classes'
+			speaker => 'html classes',
+			text    => 'A string of text potentially including "quoted bits", _underscored bits_, *starred bits*, and [bracketed bits].',
+			classes => 'html classes',
 		},
 		delay  => '1000',
 		prompt => JSON::false,

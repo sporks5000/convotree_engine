@@ -8,6 +8,7 @@ use Data::Dumper;
 use ConvoTreeEngine::Utils;
 use ConvoTreeEngine::Config;
 use ConvoTreeEngine::Mysql;
+use ConvoTreeEngine::Exceptions;
 
 sub _table {
 	my $self  = shift;

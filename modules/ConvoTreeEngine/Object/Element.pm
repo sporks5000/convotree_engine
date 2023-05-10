@@ -364,11 +364,11 @@ sub searchWithNested_hashRefs {
 	};
 	my $itemHash = sub {
 		my ($class, $value) = @_;
-		return $class->_validate_value($value, {
+		return $class->_validate_value($value, 'hashOf', {
 			speaker => [0, 'words'],
 			text    => [1, 'string'],
 			classes => [0, 'words'],
-		}, 'hashOf');
+		});
 	};
 	my $singleElement = sub {
 		### Return true if the value has the structure of a single element
@@ -378,7 +378,7 @@ sub searchWithNested_hashRefs {
 		return 0 unless $typeValidation{$type};
 		### Make sure that we'r eignoring type, if present
 		local $typeValidation{$type}{type} ||= [0, 'ignore'];
-		return $class->_validate_value($value, $typeValidation{$type}, 'hashOf');
+		return $class->_validate_value($value, 'hashOf', $typeValidation{$type});
 	};
 	my $conditionString = sub {
 		### A string of text, potentially of multiple parts separated with and/or operators ('&' or '|')
@@ -638,7 +638,7 @@ type.
 			$json = JSON::decode_json($json);
 		}
 
-		my $isValid = $class->_validate_value($json, $type, 'singleElement');
+		my $isValid = $class->_validate_value($json, 'singleElement', $type);
 		unless ($isValid) {
 			my $failures = $class->_validation_failures;
 			ConvoTreeEngine::Exception::Input->throw(
@@ -657,9 +657,9 @@ Validate that a value is valid for the details given
 =head3 Arguments
 
 * The value we're validating.
-* An array of additional arguments for that validator.
 * The validation that we're validating against OR an arrayref of multiple acceptable validations to
   validate against.
+* Any additional arguments for that validator.
 
 Most validation subroutines only require a single argument to be passed in - the value itself. Some
 however require more details in order to be validated correctly. Examples:
@@ -671,7 +671,7 @@ however require more details in order to be validated correctly. Examples:
     my $isValid = ConvoTreeEngine::Object::Element->_validate_value({
         note  => 'This is a note',
         arbit => 'Arbitrary data',
-    }, 'note', 'singleElement');
+    }, 'singleElement', 'note');
 
     ### Both of these will return true because the value is an array containing values that are either
     ### positive integers or strings.
@@ -681,9 +681,9 @@ however require more details in order to be validated correctly. Examples:
     );
     my $isValid = ConvoTreeEngine::Object::Element->_validate_value(
         ['23', 'taco'],
+        'arrayOf',
         'positiveInt',
         'string',
-        'arrayOf',
     );
 
     ### This will return true because the value being passed is either a positive integer or a hashref.
@@ -696,8 +696,8 @@ however require more details in order to be validated correctly. Examples:
 	sub _validate_value {
 		my $invocant   = shift;
 		my $value      = shift;
+		my $validation = shift;
 		my @additional = @_;
-		my $validation = pop @additional;
 
 		my $class = ref $invocant || $invocant;
 
@@ -707,7 +707,6 @@ however require more details in order to be validated correctly. Examples:
 		$nested++;
 
 		$validation = [$validation] unless ref $validation;
-		unshift @additional, $value;
 
 		my $isValid;
 		foreach my $v (@$validation) {
@@ -726,7 +725,7 @@ however require more details in order to be validated correctly. Examples:
 					error => "Validation '$v' does not exist",
 				) unless $validations{$v};
 
-				$isValid = $validations{$v}->($class, @additional);
+				$isValid = $validations{$v}->($class, $value, @additional);
 			}
 			if ($isValid) {
 				$nested--;
