@@ -424,13 +424,13 @@ sub searchWithNested_hashRefs {
 				return 0 unless $class->_validate_value($seen, ['positiveInt', 'namecat']);
 				next;
 			}
-			elsif ($part =~ m/^!?function:(.*)$/) {
+			elsif ($part =~ m/^!?function:(.*)$/i) {
 				### A part can indicate the name of a javascript function that will return a true or false value
 				my $func = $1;
 				return 0 unless $class->_validate_value($func, 'word');
 				next;
 			}
-			elsif ($part =~ m/^!?first\z/) {
+			elsif ($part =~ m/^!?first\z/i) {
 				### A part can be the word "first" indicating that no options previous to this one have returned true
 				next;
 			}
