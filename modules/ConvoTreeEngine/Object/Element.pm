@@ -308,10 +308,11 @@ sub searchWithNested_hashRefs {
 		return 1;
 	};
 	my $string = sub {
-		### returns true if the value is a text string (which may be empty)
+		### returns true if the value is a text string (which may be empty) without control characters
 		my ($class, $value) = @_;
 		return 0 if !defined $value;
 		return 0 if ref $value;
+		return 0 if $value !~ m/^[^[:cntrl:]]*\z/;
 		return 1;
 	};
 	my $positiveInt = sub {
@@ -383,13 +384,29 @@ sub searchWithNested_hashRefs {
 		return $class->_validate_value($value, 'hashOf', $typeValidation{$type});
 	};
 	my $conditionString = sub {
-		### A string of text, potentially of multiple parts separated with and/or operators ('&' or '|')
+		### A string of text
 		my ($class, $value) = @_;
 		return 1 if !defined $value;
 		return 0 if ref $value;
 		return 0 if !length $value;
-		my @parts = split m/\s*[&|]\s*/, $value;
+		### Set aside quoted strings that might contain special characters
+		my @quoted;
+		my $valueMod = '';
+		while ($value =~ m/^(.*)('[^']*'|"[^"]*")(.*)$/) {
+			$valueMod .= "$1'''";
+			$value = $3 // '';
+			push @quoted, $2;
+		}
+		### If there's an extra quote at the end, the string we were passed was malformed
+		return 0 if $value =~ m/['"]/;
+		$valueMod .= $value;
+		my @parts = split m/\s*[&|]\s*/, $valueMod;
 		foreach my $part (@parts) {
+			### Put the quoted bits back
+			while ($part =~ m/'''/) {
+				my $quoted = shift @quoted;
+				$part =~ s/'''/\Q$quoted\E/;
+			}
 			if ($part =~ m/^!?seen:(.*)$/i) {
 				### A part can also be the string "seen:" followed by an identifier for an element (indicating that that element has already been seen by the user)
 				### If it's preceeded by an exclamation point, that means that it hasn't been seen
@@ -414,6 +431,8 @@ sub searchWithNested_hashRefs {
 			};
 			return 0 unless $operator;
 			my ($varName, $cond, @other) = split m/\s*$operator\s*/, $part;
+			### If it starts with an exclamation point, strip that out
+			$varname = substr($varname, 1) if substr($varname, 0, 1) eq '!';
 			return 0 if @other;
 			return 0 unless $class->_validate_value($varName, 'variableName');
 			if ($operator =~ m/[<>]/) {
@@ -421,8 +440,16 @@ sub searchWithNested_hashRefs {
 				return 0 unless $class->_validate_value($cond, 'number');
 			}
 			else {
-				### Otherwise the condition can be a single word
-				return 0 unless $class->_validate_value($cond, 'word');
+				if ($cond =~m/^(['"])(.*)\1\s*\z/) {
+					### If it's a quoted string, just take what's in the quotes
+					$cond = $2;
+					return 0 unless $class->_validate_value($cond, 'string');
+				}
+				else {
+					### Otherwise make sure that it has no spaces or special characters
+					return 0 if $cond =~ m/\s/;
+					return 0 unless $class->_validate_value($cond, 'word');
+				}
 			}
 		}
 		return 1;

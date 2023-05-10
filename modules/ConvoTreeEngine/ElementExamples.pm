@@ -388,7 +388,7 @@ Serieses are a list of consecutive elements, and potentially a list of other rel
 
 =head2 Basic Conditions
 
-Basic conditions contain a variable, an operator, and a condition. For example...
+Basic conditions contain a variable, an operator, and a value. For example...
 
     var=1
 
@@ -402,6 +402,15 @@ The available operators are as follows:
 * <= - Indicates that the number is lesser than or equal to
 * >  - Indicates that the number is greater than
 * <  - Indicates that the number is lesser than
+
+If this is preceeded by an exclamation point, return true if the condition would otherwise return false.
+
+If the value that's being compared to is a that contains spaces or other special characters or is an
+empty string, that string must be placed in single or double quotes. So the following are acceptable:
+
+    var="a string"
+    var="&"
+    var=""
 
 =head2 Seen
 
@@ -429,11 +438,14 @@ they return true only if there have been other conditions that have returned tru
 
 =head2 "And" and "Or" operators
 
-Multiple conditions can be separated by the "&" (and) and "|" (or) operator. The "or" operator takes percidence over the "and" operator, so...
+Multiple conditions can be separated by the "&" (and) and "|" (or) operator. The "or" operator takes
+percidence over the "and" operator, so...
 
     var1>1&var2>1|var1>3
 
-...would be true either if var1 and var2 are grearer than 1, or if var1 is greater than 3
+...would be true either if var1 and var2 are grearer than 1, OR if var1 is greater than 3.
+
+If you need conditions more complicated than what this provides, look into using Condition Blocks instead.
 
 =cut
 
@@ -449,19 +461,23 @@ Condition blocks are hashrefs that contain one or more of the following keys:
 * or
 * xor
 
-If a condition block contains more than one of the above keys, it only returns true if ALL of them return true
+If a condition block contains more than one of the above keys, it only returns true if ALL of them
+return true.
 
 =head3 and
 
-And blocks can contain a condition string, a condition block, or an array of conditions strings/blocks. They return true if all of the conditions within return true
+And blocks can contain a condition string, a condition block, or an array of conditions strings/blocks.
+They return true if all of the conditions within return true.
 
 =head3 or
 
-Or blocks can contain a condition string, a condition block, or an array of conditions strings/blocks. They return true if at least one of the conditions within returns reuw
+Or blocks can contain a condition string, a condition block, or an array of conditions strings/blocks.
+They return true if at least one of the conditions within returns true.
 
 =head3 xor
 
-Xor blocks can contain a condition string, a condition block, or an array of conditions strings/blocks. They return true if only one of the conditions within returns true
+Xor blocks can contain a condition string, a condition block, or an array of conditions strings/blocks.
+They return true if only one of the conditions within returns true.
 
 =cut
 
