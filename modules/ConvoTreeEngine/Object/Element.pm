@@ -432,7 +432,7 @@ sub searchWithNested_hashRefs {
 			return 0 unless $operator;
 			my ($varName, $cond, @other) = split m/\s*$operator\s*/, $part;
 			### If it starts with an exclamation point, strip that out
-			$varname = substr($varname, 1) if substr($varname, 0, 1) eq '!';
+			$varName = substr($varName, 1) if substr($varName, 0, 1) eq '!';
 			return 0 if @other;
 			return 0 unless $class->_validate_value($varName, 'variableName');
 			if ($operator =~ m/[<>]/) {
