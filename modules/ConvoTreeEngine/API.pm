@@ -84,4 +84,37 @@ sub api {
 	];
 }
 
+=head1 ConvoTreeEngine::API::TestRequest
+
+Mocks the functions that we use from L<Plack::Request> in order to allow testing for the c<api> method.
+
+=cut
+
+{ package ConvoTreeEngine::API::TestRequest;
+	require ConvoTreeEngine::Object;
+
+	sub new {
+		my $invocant = shift;
+		my $args     = ConvoTreeEngine::Object->_prep_args(@_);
+
+		ConvoTreeEngine::Exception::Input->throw(
+			error => "expects arguments 'request_uri' and 'body' to be passed",
+			code  => 500,
+		) unless $args->{request_uri} && (ref $args->{body} || '') eq 'HASH';
+
+		my $class = ref $invocant || $invocant;
+
+		return bless $args, $class;
+	}
+
+	sub request_uri {
+		return shift->{request_uri};
+	}
+
+	sub raw_body {
+		my $self = shift;
+		return JSON::encode_json($self->{body});
+	}
+}
+
 1;
