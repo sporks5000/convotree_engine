@@ -26,7 +26,12 @@ sub api {
 		} || {};
 		my $uri = $request->request_uri;
 
-		if ($uri =~ m@/element/get/?@i) {
+		if ($uri =~ m@/element/get/(.*)$@i) {
+			my $id = $1;
+			my $elements = ConvoTreeEngine::Object::Element->searchWithNested_hashRefs($id);
+			$response = $elements;
+		}
+		elsif ($uri =~ m@/element/get/?$@i) {
 			my $ids = $body->{id} || $body->{ids};
 			my $elements = ConvoTreeEngine::Object::Element->searchWithNested_hashRefs($ids);
 			$response = $elements;
@@ -100,7 +105,7 @@ Mocks the functions that we use from L<Plack::Request> in order to allow testing
 		ConvoTreeEngine::Exception::Input->throw(
 			error => "expects arguments 'request_uri' and 'body' to be passed",
 			code  => 500,
-		) unless $args->{request_uri} && (ref $args->{body} || '') eq 'HASH';
+		) unless $args->{request_uri} && (!exists $args->{body} || (ref $args->{body} || '') eq 'HASH');
 
 		my $class = ref $invocant || $invocant;
 
