@@ -43,9 +43,9 @@
 					by_id: {},
 					by_namecat: {},
 				},
-				getElements: function(ids) {
-					CTE.getElements(this, ids);
-				},
+				getElement: function(id) {return CTE.getElement(this, id);},
+				fetchElements: function(ids) {return CTE.fetchElements(this, ids);},
+				actOnElement: function(id) {return CTE.actOnElement(this, id);},
 			};
 			// Each time the current list enters a nested list, we can add it here; each
 			// time we get to the end of a list, we just go back to the previous one.
@@ -70,7 +70,7 @@
 				});
 			}
 			if (neededIds.length) {
-				CTE.getElements(self, neededIds);
+				CTE.fetchElements(self, neededIds);
 			}
 
 			// Updates to our div
@@ -81,13 +81,37 @@
 		},
 
 		// Given our object and an ID or array of IDs, query for those IDs and add them to our object
-		getElements: function(self, ids) {
-			CTE.call_api(self.api_url, 'element/get', {ids: ids}).done(function(data) {
+		fetchElements: function(self, ids) {
+			return CTE.call_api(self.api_url, 'element/get', {ids: ids}).done(function(data) {
 				for (const [key, value] of Object.entries(data.response)) {
 					self.elements.by_id[key] ||= value;
 					self.elements.by_namecat[value.namecat] ||= value;
 				}
 			});
+		},
+
+		// Return the boject containing element data. Return nothing if it's not in our data
+		getElement: function(self, id) {
+			if (self.elements.by_id[id]) {
+				return self.elements.by_id[id];
+			}
+			else if (self.elements.by_namecat[id]) {
+				return self.elements.by_namecat[id];
+			}
+		},
+
+		// Given our object and an ID or namecat, act on the corrosponding element
+		actOnElement: function(self, id) {
+			let action = function() {
+				// ##### TODO: a lot more stuff here
+				const element = self.getElement(id);
+				console.log({element:element});
+			};
+
+			if (!self.elements.by_id[id] && !self.elements.by_namecat[id]) {
+				return self.fetchElements(id).done(action);
+			}
+			return $.Deferred().resolve().done(action);
 		},
 	};
 
