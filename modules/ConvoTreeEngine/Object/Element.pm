@@ -252,14 +252,6 @@ sub searchWithNested_hashRefs {
 
 {
 	my %typeValidation;
-	my %regexValidation = (
-		variableName => qr/^[a-zA-Z0-9_.]+\z/,
-		words        => qr/^(?:[a-zA-Z0-9_]+[ -]?)+\b\z/,
-		word         => qr/^[a-zA-Z0-9_]+\z/,
-		string       => qr/^[^[:cntrl:]]*\z/,
-		positiveInt  => qr/^[1-9][0-9]*\z/,
-		number       => qr/^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z/,
-	);
 
 	my $ignore = sub {
 		### no validation necessary; always returns true
@@ -292,44 +284,18 @@ sub searchWithNested_hashRefs {
 		return 1;
 	};
 	my $matches = sub {
-		my ($class, $value, $matchType) = @_;
+		my ($class, $value, $regex, $negate) = @_;
 		return 0 unless defined $value;
 		return 0 if ref $value;
-		my $regex = $regexValidation{$matchType};
-		return 0 unless $regex;
-		return 1 if $value =~ m/$regex/;
+		return 0 unless defined $regex;
+		if ($negate) {
+			return 1 unless $value =~ m/$regex/;
+		}
+		else {
+			return 1 if $value =~ m/$regex/;
+		}
 		return 0;
 	};
-	my $variableName = sub {
-		### Returns true if the value matches what we expect from a javascript variable name
-		my ($class, $value) = @_;
-		return $class->_validate_value($value, 'matches', 'variableName');
-	};
-	my $words = sub {
-		### Returns true if the value is a string of words separated by either single spaces or single hyphens
-		my ($class, $value) = @_;
-		return $class->_validate_value($value, 'matches', 'words');
-	};
-	my $word = sub {
-		### Returns true if the value is a single word containg letters numbers and/or underscores
-		my ($class, $value) = @_;
-		return $class->_validate_value($value, 'matches', 'word');
-	};
-	my $string = sub {
-		### returns true if the value is a text string (which may be empty) without control characters
-		my ($class, $value) = @_;
-		return $class->_validate_value($value, 'matches', 'string');
-	};
-	my $positiveInt = sub {
-		### Returns true if the value looks like a positive integer
-		my ($class, $value) = @_;
-		return $class->_validate_value($value, 'matches', 'positiveInt');
-	};
-	my $number = sub {
-		### Returns true if the value looks like a logical number, either positive or negative, with or without decimal places
-		my ($class, $value) = @_;
-		return $class->_validate_value($value, 'matches', 'number');
-	},
 	my $namecat = sub {
 		### Returns true if the value looks like a namecat
 		### A namecat must validate as 'words' followed by a colon, followed by 'words'. Either instance of 'words' can instead be an empty string, but not both
@@ -569,12 +535,12 @@ sub searchWithNested_hashRefs {
 		hash            => $hash,
 		array           => $array,
 		matches         => $matches,
-		variableName    => $variableName,
-		words           => $words,
-		word            => $word,
-		string          => $string,
-		positiveInt     => $positiveInt,
-		number          => $number,
+		variableName    => '^[a-zA-Z0-9_.]+\z', # What we expect from a javascript variable name
+		words           => '^(?:[a-zA-Z0-9_]+[ -]?)+\b\z', # A string of words separated by either single spaces or single hyphens
+		word            => '^[a-zA-Z0-9_]+\z', # A single word containg letters numbers and/or underscores
+		string          => '^[^\x00-\x09\x0B\x0C\x0E-\x1F\x7F]*$', # No control characters other than "Line Feed" and "Carriage Return"
+		positiveInt     => '^[1-9][0-9]*\z', # Looks like a positive integer
+		number          => '^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z', # Looks like a number
 		namecat         => $namecat,
 		itemBlock       => $itemBlock,
 		itemHash        => $itemHash,
@@ -776,11 +742,27 @@ however require more details in order to be validated correctly. Examples:
 				$isValid = $arrayOf->($class, $value, @patterns);
 			}
 			else {
+				my @additional = @additional;
+				if ($v =~ m/^([^\(]+)\((.*)\)\z/) {
+					my $validator = $1;
+					my $args = $2;
+					my @args = split m/\s*,\s*/, $args;
+					@additional = (@args, @additional);
+					$v = $validator;
+				}
+
 				ConvoTreeEngine::Exception::Input->throw(
 					error => "Validation '$v' does not exist",
 				) unless $validations{$v};
 
-				$isValid = $validations{$v}->($class, $value, @additional);
+				my $ref = ref $validations{$v} || '';
+				if ($ref eq 'CODE') {
+					$isValid = $validations{$v}->($class, $value, @additional);
+				}
+				elsif ($ref eq '') {
+					### If it's just a string, assume it's regex
+					$isValid = $validations{matches}->($class, $value, $validations{$v}, @additional);
+				}
 			}
 			if ($isValid) {
 				$nested--;
@@ -883,13 +865,11 @@ sub listReferencedElements {
 	}
 	elsif ($type eq 'choice') {
 		foreach my $choice (@{$jsonRef->{choices}}) {
-			if (@$choice > 2) {
-				if (ref $choice->[2]) {
-					push @elements, @{$choice->[2]};
-				}
-				else {
-					push @elements, $choice->[2];
-				}
+			if (ref $choice->{then}) {
+				push @elements, @{$choice->{then}};
+			}
+			else {
+				push @elements, $choice->{then};
 			}
 		}
 	}
@@ -1033,8 +1013,8 @@ sub sanitizeNesting {
 		}
 		elsif ($type eq 'choice') {
 			foreach my $choice (@{$jsonRef->{choices}}) {
-				if (@$choice > 2) {
-					$choice->[2] = $element->_sanitize_nesting_arrays($choice->[2], $args);
+				if ($choice->{then}) {
+					$choice->{then} = $element->_sanitize_nesting_arrays($choice->{then}, $args);
 				}
 			}
 		}

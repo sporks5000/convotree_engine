@@ -167,9 +167,10 @@ sub createTables {
 			require ConvoTreeEngine::ElementExamples;
 			my $query = qq/INSERT IGNORE INTO ${prefix}c_element_types (type, example) VALUES /;
 			my @bits;
-			foreach my $type (keys %ConvoTreeEngine::ElementExamples::examples) {
-				my $example = $ConvoTreeEngine::ElementExamples::examples{$type};
+			foreach my $key (keys %ConvoTreeEngine::ElementExamples::examples) {
+				my $example = $ConvoTreeEngine::ElementExamples::examples{$key};
 				$example = JSON::encode_json($example);
+				my $type = $key =~ s/[0-9]+$//r;
 				push @bits, $type, $example;
 				$query .= '(?, ?),';
 			}
