@@ -270,7 +270,7 @@ sub searchWithNested_hashRefs {
 			return 1 if $value->isa('JSON::Boolean');
 			return 0;
 		}
-		return 1 if $value =~ /^[01]\z/;
+		return 1 if $class->_validate_regex($value, '^[01]\z');
 		return 0;
 	};
 	my $hash = sub {
@@ -283,27 +283,12 @@ sub searchWithNested_hashRefs {
 		return 0 unless (ref $value || '') eq 'ARRAY';
 		return 1;
 	};
-	my $matches = sub {
-		my ($class, $value, $regex, $negate) = @_;
-		return 0 unless defined $value;
-		return 0 if ref $value;
-		return 0 unless defined $regex;
-		if ($negate) {
-			return 1 unless $value =~ m/$regex/;
-		}
-		else {
-			return 1 if $value =~ m/$regex/;
-		}
-		return 0;
-	};
 	my $namecat = sub {
 		### Returns true if the value looks like a namecat
 		### A namecat must validate as 'words' followed by a colon, followed by 'words'. Either instance of 'words' can instead be an empty string, but not both
 		### NOTE that while a namecat can be undefined, a undefined value DOES NOT validate as a namecat
 		my ($class, $value) = @_;
-		return 0 if !defined $value;
-		return 0 if ref $value;
-		return 0 unless $value =~ m/:/;
+		return 0 if $class->_validate_regex($value, ':', 1);
 		my ($cat, $name, @other) = split m/:/, $value;
 		return 0 if @other;
 		return 0 if $cat  && !$class->_validate_value($cat,  'words');
@@ -534,7 +519,6 @@ sub searchWithNested_hashRefs {
 		boolean         => $boolean,
 		hash            => $hash,
 		array           => $array,
-		matches         => $matches,
 		variableName    => '^[a-zA-Z0-9_.]+\z', # What we expect from a javascript variable name
 		words           => '^(?:[a-zA-Z0-9_]+[ -]?)+\b\z', # A string of words separated by either single spaces or single hyphens
 		word            => '^[a-zA-Z0-9_]+\z', # A single word containg letters numbers and/or underscores
@@ -671,6 +655,35 @@ type.
 		return JSON::encode_json($json);
 	}
 
+=head2 _validate_regex
+
+Verify that a value is a scalar and matches (or does not match) a regular expression
+
+=head3 Arguments
+
+* $value  - The value we're validating
+* $regex  - The regular expression we're validating against
+* $negate - Boolean; true if we want to NOT match the regular expression
+
+=cut
+
+sub _validate_regex {
+	my ($class, $value, $regex, $negate) = @_;
+
+	return 0 unless defined $value;
+	return 0 if ref $value;
+	return 0 unless defined $regex;
+
+	if ($negate) {
+		return 1 unless $value =~ m/$regex/;
+	}
+	else {
+		return 1 if $value =~ m/$regex/;
+	}
+
+	return 0;
+}
+
 =head2 _validate_value
 
 Validate that a value is valid for the details given
@@ -761,7 +774,7 @@ however require more details in order to be validated correctly. Examples:
 				}
 				elsif ($ref eq '') {
 					### If it's just a string, assume it's regex
-					$isValid = $validations{matches}->($class, $value, $validations{$v}, @additional);
+					$isValid = $class->_validate_regex($value, $validations{$v}, @additional);
 				}
 			}
 			if ($isValid) {
