@@ -43,6 +43,8 @@ my $prefix = $ConvoTreeEngine::Config::tablePrefix;
 my $rows = ConvoTreeEngine::Mysql->fetchRows(qq/SELECT * FROM ${prefix}c_element_types/);
 foreach my $row (sort {$a->{type} cmp $b->{type}} @$rows) {
 	eval {
+		### Turn off item type validation
+		local $ConvoTreeEngine::Object::Element::STRICT_ITEM_TYPE_VALIDATION = 0;
 		ConvoTreeEngine::Object::Element->create({
 			type     => $row->{type},
 			json     => $row->{example},

@@ -78,6 +78,27 @@ sub create {
 	return $self;
 }
 
+=head2 find
+
+Allows passing in either an ID, a namecat, or standard find args.
+
+=cut
+
+sub find {
+	my $invocant = shift;
+	if (@_ == 1 && !ref $_[0]) {
+		my $arg = shift;
+		if ($arg =~ m/^[0-9]+$/) {
+			return $invocant->SUPER::find({id => $arg});
+		}
+		else {
+			return $invocant->SUPER::find({namecat => $arg});
+		}
+	}
+
+	return $invocant->SUPER::find(@_);
+}
+
 sub findOrCreate {
 	my $invocant = shift;
 	my $args     = $invocant->_prep_args(@_);
@@ -250,6 +271,7 @@ sub searchWithNested_hashRefs {
 #== Validation ==#
 #================#
 
+our $STRICT_ITEM_TYPE_VALIDATION = 1;
 {
 	my %typeValidation;
 
@@ -295,14 +317,19 @@ sub searchWithNested_hashRefs {
 		return 0 if $name && !$class->_validate_value($name, 'words');
 		return 1;
 	};
-	my $itemBlock = sub {
+	my $elementList = sub {
+		my ($class, $value) = @_;
+		return 0 unless $class->_validate_value($value, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']);
+		return 1;
+	};
+	my $itemTextNested = sub {
 		my ($class, $value) = @_;
 		return 0 unless $class->_validate_value($value, 'array');
 		### The first element will either be undefined or a string of words
 		return 0 if defined $value->[0] && !$class->_validate_value($value->[0], 'words');
 		### The second element must be undefined, or a string, or another item block
 		if (defined $value->[1]) {
-			return 0 unless $class->_validate_value($value->[1], ['string', 'arrayOf(itemBlock)']);
+			return 0 unless $class->_validate_value($value->[1], ['string', 'arrayOf(itemTextNested)']);
 			### If it is defined, there cannot be a third element
 			return 0 unless @$value == 2;
 		}
@@ -313,14 +340,15 @@ sub searchWithNested_hashRefs {
 		}
 		return 1;
 	};
-	my $itemHash = sub {
+	my $itemTextHash = sub {
 		my ($class, $value) = @_;
 		return $class->_validate_value($value, 'hashOf', {
 			speaker => [0, 'words'],
-			text    => [1, 'string'],
+			text    => [1, ['string', 'arrayOf(itemTextNested)']],
 			classes => [0, 'words'],
+			hover   => [0, 'string'],
 		});
-	};
+	},
 	my $singleElement = sub {
 		### Return true if the value has the structure of a single element
 		my ($class, $value, $type) = @_;
@@ -421,7 +449,7 @@ sub searchWithNested_hashRefs {
 			or  => [0, ['conditionString', 'conditionBlock', 'arrayOf(conditionString,conditionBlock)']],
 			xor => [0, ['conditionString', 'conditionBlock', 'arrayOf(conditionString,conditionBlock)']],
 		});
-		### Make sur eit contains at least one of the above keys
+		### Make sure it contains at least one of the above keys
 		return 1 unless scalar keys %$value == 0;
 	};
 	my $singleCondition = sub {
@@ -429,11 +457,11 @@ sub searchWithNested_hashRefs {
 		my ($class, $value) = @_;
 		return 0 unless $class->_validate_value($value, 'array');
 		### The first element will either be undefined or a condition string
-		return 0 if defined $value->[0] && !$class->_validate_value($value->[0], ['conditionString', 'conditionBlock']);
+		return 0 unless $class->_validate_value($value->[0], ['undefined', 'conditionString', 'conditionBlock']);
 		return 0 if @$value > 2;
 		return 1 unless @$value == 2;
 		### If the second element is present, it should be an element ID or an array of element IDs
-		return 0 unless $class->_validate_value($value->[1], ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']);
+		return 0 unless $class->_validate_value($value->[1], 'elementList');
 		return 1;
 	};
 	my $variableUpdates = sub {
@@ -449,20 +477,25 @@ sub searchWithNested_hashRefs {
 	};
 	my $choice = sub {
 		my ($class, $value) = @_;
-		return $class->_validate_value($value, 'hashOf', {
-			cond     => [0, ['undefined', 'conditionString', 'conditionBlock']],
-			text     => [1, 'string'],
-			hover    => [0, 'string'],
-			speaker  => [0, 'words'],
-			classes  => [0, 'words'],
-			showx    => [0, ['undefined', 'conditionString', 'conditionBlock']],
-			classesx => [0, 'words'],
-			textx    => [0, 'string'],
-			hoverx   => [0, 'words'],
-			function => [0, 'word'],
-			arbit    => [0, 'ignore'],
-			then     => [0, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
+		return 0 unless $class->_validate_value($value, 'hashOf', {
+			cond    => [0, ['undefined', 'conditionString', 'conditionBlock']],
+			element => [1, ['positiveInt', 'namecat']],
+			then    => [0, 'elementList'],
 		});
+		### The element MUST be of type "item"
+		return 1 unless $STRICT_ITEM_TYPE_VALIDATION;
+		my $element = ConvoTreeEngine::Object::Element->find($value->{element});
+		return 0 unless $element;
+		return 0 unless $element->type eq 'item';
+		return 1;
+	};
+	my $randomPath = sub {
+		my ($class, $value) = @_;
+		return 0 unless $class->_validate_value($value, 'array');
+		return 0 unless @$value == 2;
+		return 0 unless $class->_validate_value($value->[0], 'positiveInt');
+		return 0 unless $class->_validate_value($value->[1], 'elementList');
+		return 1;
 	};
 	my $arrayOf = sub {
 		my ($class, $value, @patterns) = @_;
@@ -526,14 +559,16 @@ sub searchWithNested_hashRefs {
 		positiveInt     => '^[1-9][0-9]*\z', # Looks like a positive integer
 		number          => '^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z', # Looks like a number
 		namecat         => $namecat,
-		itemBlock       => $itemBlock,
-		itemHash        => $itemHash,
+		elementList     => $elementList,
+		itemTextNested  => $itemTextNested,
+		itemTextHash    => $itemTextHash,
 		singleElement   => $singleElement,
 		conditionString => $conditionString,
 		conditionBlock  => $conditionBlock,
 		singleCondition => $singleCondition,
 		variableUpdates => $variableUpdates,
 		choice          => $choice,
+		randomPath      => $randomPath,
 		arrayOf         => $arrayOf,
 		hashOf          => $hashOf,
 	);
@@ -548,11 +583,12 @@ an array of strings indicating validators for what can be present.
 
 	%typeValidation = (
 		item     => {
-			text   => [1, ['arrayOf(itemBlock)', 'itemHash']],
-			delay  => [0, 'positiveInt'],
-			prompt => [0, 'boolean'],
-			stop   => [0, 'boolean'],
-			arbit  => [0, 'ignore'],
+			text     => [1, 'itemTextHash'],
+			textx    => [0, 'itemTextHash'],
+			function => [0, 'word'],
+			delay    => [0, 'positiveInt'],
+			prompt   => [0, 'boolean'],
+			arbit    => [0, 'ignore'],
 		},
 		note     => {
 			note  => [1, 'string'],
@@ -582,11 +618,11 @@ an array of strings indicating validators for what can be present.
 		},
 		assess   => {
 			cond  => [1, 'singleCondition'],
-			after => [0, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
+			after => [0, 'elementList'],
 			arbit => [0, 'ignore'],
 		},
 		negate   => {
-			assess_id => [1, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
+			assess_id => [1, 'elementList'],
 			arbit     => [0, 'ignore'],
 		},
 		stop     => {
@@ -612,16 +648,20 @@ an array of strings indicating validators for what can be present.
 			delay    => [0, 'positiveInt'],
 			stop     => [0, 'boolean'],
 			arbit    => [0, 'ignore'],
-
 		},
 		data     => {
-			get   => [1, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
+			get   => [1, 'elementList'],
 			arbit => [0, 'ignore'],
 		},
 		series   => {
-			series     => [1, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
-			additional => [0, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']],
+			series     => [1, 'elementList'],
+			additional => [0, 'elementList'],
 			arbit      => [0, 'ignore'],
+		},
+		random   => {
+			paths    => [1, 'arrayOf(randomPath)'],
+			function => [1, 'word'],
+			arbit    => [0, 'ignore'],
 		},
 	);
 
@@ -657,7 +697,11 @@ type.
 
 =head2 _validate_regex
 
-Verify that a value is a scalar and matches (or does not match) a regular expression
+Verify that a value is a scalar and matches (or does not match) a regular expression.
+
+Note: Under the vast majority of circumstances, this should be called with an "if" and not an
+"unless", as regardless of whether we're negating, this will return fales if the value passed
+is undefined, or if it is not a string.
 
 =head3 Arguments
 
@@ -878,12 +922,15 @@ sub listReferencedElements {
 	}
 	elsif ($type eq 'choice') {
 		foreach my $choice (@{$jsonRef->{choices}}) {
-			if (ref $choice->{then}) {
-				push @elements, @{$choice->{then}};
+			if (exists $choice->{then}) {
+				if (ref $choice->{then}) {
+					push @elements, @{$choice->{then}};
+				}
+				else {
+					push @elements, $choice->{then};
+				}
 			}
-			else {
-				push @elements, $choice->{then};
-			}
+			push @elements, $choice->{element};
 		}
 	}
 	elsif ($type eq 'data') {
@@ -907,6 +954,16 @@ sub listReferencedElements {
 			}
 			else {
 				push @elements, $jsonRef->{additional};
+			}
+		}
+	}
+	elsif ($type eq 'random') {
+		foreach my $path (@{$jsonRef->{paths}}) {
+			if (ref $path->[1]) {
+				push @elements, @{$path->[1]};
+			}
+			else {
+				push @elements, $path->[1];
 			}
 		}
 	}
@@ -957,7 +1014,7 @@ sub doNestedElements {
 
 	if (my @elements = $self->listReferencedElements(1)) {
 		my $type = $self->type;
-		if ($type eq 'if' || $type eq 'assess' || $type eq 'choice' || $type eq 'series') {
+		if ($type eq 'if' || $type eq 'assess' || $type eq 'choice' || $type eq 'series' || $type eq 'random') {
 			my $my_id = $self->id;
 			require ConvoTreeEngine::Object::Element::Nested;
 			my $table = ConvoTreeEngine::Object::Element::Nested->_table();
@@ -1026,7 +1083,12 @@ sub sanitizeNesting {
 		}
 		elsif ($type eq 'choice') {
 			foreach my $choice (@{$jsonRef->{choices}}) {
-				if ($choice->{then}) {
+				ConvoTreeEngine::Exception::Internal->throw(
+					error => "Cannot delete element with ID $args->{id}, as it is a choice in element " . $element->id . '.',
+					code  => 500,
+				) if $choice->{element} == $args->{id};
+
+				if (exists $choice->{then}) {
 					$choice->{then} = $element->_sanitize_nesting_arrays($choice->{then}, $args);
 				}
 			}
@@ -1035,6 +1097,11 @@ sub sanitizeNesting {
 			$jsonRef->{series} = $element->_sanitize_nesting_arrays($jsonRef->{series}, $args);
 			if ($jsonRef->{additional}) {
 				$jsonRef->{additional} = $element->_sanitize_nesting_arrays($jsonRef->{additional}, $args);
+			}
+		}
+		elsif ($type eq 'random') {
+			foreach my $path (@{$jsonRef->{paths}}) {
+				$path->[1] = $element->_sanitize_nesting_arrays($path->[1], $args);
 			}
 		}
 

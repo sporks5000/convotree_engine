@@ -19,63 +19,68 @@ to the user.
 =cut
 
 $examples{item} = {
-	text   => [
-		[
-			'span classes',
-			'Span text',
-		],
-		[
-			'span classes',
-			[
-				[
-					'nested span classes',
-					'Spans can be nested...'
-				],
-				[
-					'nested span classes',
-					'...as deeply as desired'
-				],
-			],
-		],
-		[
-			undef,
-			'If the class is null, the text will not be placed into its own span',
-		],
-		[
-			'span class',
-			undef,
-			'variableName',
-		],
-	],
-	delay  => '1000',
-	prompt => JSON::false,
-	stop   => JSON::false,
-	arbit  => {
-		"Additional details" => {
-			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
-			"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
-			"3" => 'The "prompt" key is optional. It contains a boolean value indicating whether to prompt before continuing',
-			"4" => 'The "stop" key is optional. It contain a boolean value indicating whether or not the flow of elements sshould stop after this point (identical to a "stop" block)',
-			"5" => 'For the text blocks, if the second string is null, a third string can include the name of a variable. the value of that variable will be displayed',
-		},
-	},
-};
-$examples{item2} = {
-	text   => {
+	text     => {
 		speaker => 'html classes',
 		text    => 'A string of text potentially including "quoted bits", _underscored bits_, *starred bits*, and [bracketed bits].',
 		classes => 'html classes',
+		hover   => 'A string of text potentially including [bracketed bits].',
 	},
-	delay  => '1000',
-	prompt => JSON::false,
-	stop   => JSON::false,
-	arbit  => {
+	textx    => {
+		speaker => 'html classes',
+		text    => [
+			[
+				'span classes',
+				'Span text',
+			],
+			[
+				'span classes',
+				[
+					[
+						'nested span classes',
+						'Spans can be nested...'
+					],
+					[
+						'nested span classes',
+						'...as deeply as desired'
+					],
+				],
+			],
+			[
+				undef,
+				'If the class is null, the text will not be placed into its own span',
+			],
+			[
+				'span class',
+				undef,
+				'variableName',
+			],
+		],
+		classes => 'html classes',
+		hover   => 'A string of text potentially including [bracketed bits].',
+	},
+	function => 'functionName',
+	delay    => '1000',
+	prompt   => JSON::false,
+	arbit    => {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 			"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
 			"3" => 'The "prompt" key is optional. It contains a boolean value indicating whether to prompt before continuing',
-			"4" => 'The "stop" key is optional. It contain a boolean value indicating whether or not the flow of elements sshould stop after this point (identical to a "stop" block)',
-			"5" => 'If the "text" key is given a hashref, the text in it will be parsed. Quoted bits will be put into a span and given the classes specified under "speaker", underscored bits will be italicized, starred bits will be bolded, and text within bracketed bits will be interpreted as a variable name, and replaced with the value of that variable',
+			"4" => 'If the "text" key will be given a hashref. If the "text" key within it is a string...',
+			"4.a" => 'Quoted bits will be put into a span and given the classes specified under "speaker"',
+			"4.b" => 'Underscored bits will be italicized',
+			"4.c" => 'Starred bits will be bolded',
+			"4.d" => 'Text within bracketed bits will be interpreted as a variable name, and replaced with the value of that variable',
+			"5" => 'If the "text" key within it is an arrayref...',
+			"5.a" => 'It will contain any number of array refs',
+			"5.b" => 'The first element in these will be a string of html classes to apply to the span',
+			"5.c" => 'The second element will either be a string of text, or another arrayref of arrayrefs, nested as deeply as the creator needs',
+			"5.d" => 'If the second string is null, a third string can include the name of a variable. the value of that variable will be displayed',
+			"6" => 'The "hover" key in the "text" hashref will be text that is visible on mouseover',
+			"7" => 'The "classes" key in the "text" hashref will be the html classes applied to the block as a whole',
+			"8" => '"function" is the name of a function (if any) that will be run to generate how this element is displayed.',
+			"9" => 'The "textx" key will have the same input as the "text" key. It represents what will be displayed in the Item block is not active',
+			"9.a" => '...for example, if it is a choice where the conditions were not met',
 		},
 	},
 };
@@ -262,16 +267,9 @@ is the potential for choices to be unavialable based on the values of various va
 $examples{choice} = {
 	choices => [
 		{
-			cond     => undef,
-			text     => 'display text',
-			hover    => 'hover text',
-			speaker  => 'html classes',
-			classes  => 'html classes',
-			showx    => undef,
-			classesx => 'more html classes',
-			textx    => 'alternate display text',
-			hoverx   => 'alternate hover text',
-			then     => [1,2],
+			cond    => undef,
+			element => 2,
+			then    => 2,
 		},
 	],
 	arbit  => {
@@ -279,18 +277,8 @@ $examples{choice} = {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 			"2" => 'The "choices" key will contain an array of hashes, containing the following keys',
 			"2.a" => '"cond" is the conditions necessary for the option ot be available. undef indicates that ti is always available. If the key is not present, it is always available',
-			"2.b" => '"text" is the text that will be displayed for the option. Stars, underscores, brackets, and quotes will be parsed, as in "item" blocks',
-			"2.c" => '"hover" is the hover text for the option',
-			"2.d" => '"speaker" is html classes that will be used for quoted bits',
-			"2.e" => '"classes" is the html classes that will be used to display the option if available',
-			"2.f" => '"showx" is the conditions necessary to show the option if it is not available. undef will always show it. If the key is not present, it will not be shown',
-			"2.g" => '"classesx" is the classes that will be used to display the option if not available',
-			"2.h" => '"textx" is alternative text to display if the option is not available',
-			"2.i" => '"hoverx", is alternative hover text to display if the option is not available',
-			"2.j" => '"function" is the name of a function that will be run to generate the display for the choice. This will take precidence over "text" if present',
-			"2.j.1" => 'The entire condition hash will be passed intot he function as the first and only argument',
-			"2.k" => '"arbit" is arbitrary data. The creator can use it for functions, if desired.',
-			"2.j" => '"then" is the element or an array of elements that will follow if this option is chosen',
+			"2.b" => '"element" is the ID or namecat of the element to display for this choice',
+			"2.c" => '"then" is the element or an array of elements that will follow if this option is chosen',
 			"3" => 'These choices will be displayed to the user in the order given',
 		},
 	},
@@ -378,6 +366,34 @@ $examples{series} = {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 			"2" => 'The "series" key must contain either a single positive integer (representing a single element ID) or an array of positive integers',
 			"3" => 'The "additional" key is optional. It must contain either a single positive integer (representing a single element ID) or an array of positive integers. These elements will not be part of the ordered series, but they will still be returned when the series is requested.',
+		},
+	},
+};
+
+=head2 Random
+
+Ramdoms indicate an instance where the path of the story can fork at random.
+
+=cut
+
+$examples{random} = {
+	paths    => [
+		[
+			5,
+			1,
+		],
+		[
+			3,
+			[1, 4],
+		],
+	],
+	function => 'functionName',
+	arbit    => {
+		"Additional details" => {
+			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
+			"2" => 'The "paths" key must contain an array fo arrays. Each of the nested arrays will contain towo elements, a number, and an element id, or arrayref of element ids',
+			"2.a" => 'The first number will indicate the weight of the potential for that event occurring. Higher means it is more likely.',
+			"3" => 'If a function name is given, the data for this element will be passed into that function, and the returned value will be interpreted as if it is the data for the element',
 		},
 	},
 };
