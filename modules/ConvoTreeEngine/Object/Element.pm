@@ -470,6 +470,8 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 		return 0 unless $class->_validate_value($value, 'hash');
 		foreach my $key (keys %$value) {
 			return 0 unless $class->_validate_value($key, 'variableName');
+			### The strings for updating numerical values could be prased, but if they failed, we'd
+			### just check them against "string" anyway, and they'd pass that, so there's no point.
 			return 0 unless $class->_validate_value($value->{$key}, ['string', 'undefined']);
 			return 0 if $value->{$key} =~ m/^[+\*\/-]=/ && !$class->_validate_value(substr($value->{$key}, 2), 'number');
 		}

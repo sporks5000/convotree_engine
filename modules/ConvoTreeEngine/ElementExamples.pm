@@ -252,7 +252,10 @@ $examples{variable} = {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 			"2" => 'The "update" key should be an object containing key value pairs of variable names to what that variable is being set to',
-			"3" => 'If the value begins with "+=", "-=", "*=", or "/=", it is assumed that the current value of that variable is a number, and that we will be adding to, subtracting from, multiplying by, or dividing from that value',
+			"2.a" => 'Variable names can contain uppercase and lowercase letters, numbers, underscores, and periods',
+			"3" => 'If the value begins with "+=", "-=", "*=", or "/=", followed by a number it is assumed that we will be adding to, subtracting from, multiplying by, or dividing from that value',
+			"3.a" => 'If there is no existing value, we assume the value of 0',
+			"3.b" => 'If there is an existing value, but does not appear to be a number, we simply replace that value with the string given',
 		},
 	},
 };

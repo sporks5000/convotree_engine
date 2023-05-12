@@ -22,11 +22,12 @@
 		/* Given a div element, initiate a convoTreeEngine instance
 
 		Arguments:
-		- ids      - 
-		- div      - 
-		- name     - 
-		- api_url  - 
-		- elements - 
+		- ids       - 
+		- div       - 
+		- name      - 
+		- api_url   - 
+		- elements  - 
+		- variables - 
 
 		*/
 		convoLaunch: function(settings) {
@@ -47,6 +48,7 @@
 				fetchElements: function(ids) {return CTE.fetchElements(this, ids);},
 				actOnElement: function(id) {return CTE.actOnElement(this, id);},
 			};
+			self.variables = settings.variables || {};
 			// Each time the current list enters a nested list, we can add it here; each
 			// time we get to the end of a list, we just go back to the previous one.
 			// ##### TODO: build upon this
@@ -100,18 +102,76 @@
 			}
 		},
 
-		// Given our object and an ID or namecat, act on the corrosponding element
+		// Given our object and an ID or namecat, act on the corresponding element
 		actOnElement: function(self, id) {
-			let action = function() {
-				// ##### TODO: a lot more stuff here
-				const element = self.getElement(id);
-				console.log({element:element});
-			};
-
+			let action;
 			if (!self.elements.by_id[id] && !self.elements.by_namecat[id]) {
-				return self.fetchElements(id).done(action);
+				action = self.fetchElements(id);
 			}
-			return $.Deferred().resolve().done(action);
+			action ||= $.Deferred().resolve();
+
+			return action.done(function() {
+				const element = self.getElement(id);
+				console.log({element:element}); // ##### TODO: remove this
+				if (!element) {
+					// ##### TODO: Should we throw some kind of error if the element does exist even after we called for it?
+					return;
+				}
+				CTE.parse[element.type](self, element);
+			});
+		},
+
+		parse: {
+			variable: function(self, element) {
+				for (let [key, value] of Object.entries(element.json.update)) {
+					if (typeof value === 'number') {
+						value = String(value);
+					}
+					else if (value === null) {
+						// If it's null, delete the key from the variables hash
+						delete self.variables[key];
+						continue;
+					}
+
+					if (/^[+*\/-]=\s?(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(value)) {
+						// If the value indicates that we're updating a numerical value. I.E. "+=3"
+						let current = self.variables[key];
+						if (typeof current === 'string') {
+							self.variables[key] = value;
+							continue;
+						}
+						else if (typeof current === 'undefined' || current === null) {
+							current = 0;
+						}
+
+						const operator = value.substring(0,2);
+						const number = Number(value.substring(2));
+
+						if (operator === '+=') {
+							current += number;
+						}
+						else if (operator === '-=') {
+							current += number;
+						}
+						else if (operator === '*=') {
+							current *= number;
+						}
+						else if (operator === '/=') {
+							current /= number;
+						}
+
+						self.variables[key] = current;
+					}
+					else if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(value)) {
+						// If the value is just a number
+						self.variables[key] = Number(value);
+					}
+					else {
+						// If the value is a string
+						self.variables[key] = value;
+					}
+				}
+			},
 		},
 	};
 
