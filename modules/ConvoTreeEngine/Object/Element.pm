@@ -329,7 +329,7 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 		return 0 if defined $value->[0] && !$class->_validate_value($value->[0], 'words');
 		### The second element must be undefined, or a string, or another item block
 		if (defined $value->[1]) {
-			return 0 unless $class->_validate_value($value->[1], ['string', 'arrayOf(itemTextNested)']);
+			return 0 unless $class->_validate_value($value->[1], ['string', 'arrayOf(1,itemTextNested)']);
 			### If it is defined, there cannot be a third element
 			return 0 unless @$value == 2;
 		}
@@ -344,7 +344,7 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 		my ($class, $value) = @_;
 		return $class->_validate_value($value, 'hashOf', {
 			speaker => [0, 'words'],
-			text    => [1, ['string', 'arrayOf(itemTextNested)']],
+			text    => [1, ['string', 'arrayOf(1,itemTextNested)']],
 			classes => [0, 'words'],
 			hover   => [0, 'string'],
 		});
@@ -500,6 +500,10 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 	my $arrayOf = sub {
 		my ($class, $value, @patterns) = @_;
 		return 0 unless $class->_validate_value($value, 'array');
+		if ($patterns[0] eq '1') {
+			shift @patterns;
+			return 0 unless @$value;
+		}
 		return 0 unless @patterns;
 		foreach my $deep (@$value) {
 			return 0 unless $class->_validate_value($deep, \@patterns);
@@ -613,7 +617,7 @@ an array of strings indicating validators for what can be present.
 			arbit => [0, 'ignore'],
 		},
 		if       => {
-			cond  => [1, 'arrayOf(singleCondition)'],
+			cond  => [1, 'arrayOf(1,singleCondition)'],
 			arbit => [0, 'ignore'],
 		},
 		assess   => {
@@ -633,7 +637,7 @@ an array of strings indicating validators for what can be present.
 			arbit  => [0, 'ignore'],
 		},
 		choice   => {
-			choices => [1, 'arrayOf(choice)'],
+			choices => [1, 'arrayOf(1,choice)'],
 			arbit   => [0, 'ignore'],
 		},
 		display  => {
@@ -659,7 +663,7 @@ an array of strings indicating validators for what can be present.
 			arbit      => [0, 'ignore'],
 		},
 		random   => {
-			paths    => [1, 'arrayOf(randomPath)'],
+			paths    => [1, 'arrayOf(1,randomPath)'],
 			function => [1, 'word'],
 			arbit    => [0, 'ignore'],
 		},
@@ -792,6 +796,7 @@ however require more details in order to be validated correctly. Examples:
 				my $patterns = $1;
 				my @patterns = split m/\s*,\s*/, $patterns;
 				foreach my $pattern (@patterns) {
+					next if $pattern eq '1';
 					ConvoTreeEngine::Exception::Input->throw(
 						error => "Validation '$pattern' does not exist",
 					) unless $validations{$pattern};
