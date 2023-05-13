@@ -45,7 +45,7 @@
 					by_namecat: {},
 				},
 				getElement: function(id) {return CTE.getElement(this, id);},
-				fetchElements: function(ids) {return CTE.fetchElements(this, ids);},
+				fetchElements: function(ids, force) {return CTE.fetchElements(this, ids, force);},
 				actOnElement: function(id) {return CTE.actOnElement(this, id);},
 			};
 			self.variables = settings.variables || {};
@@ -63,17 +63,7 @@
 			}
 
 			// Determine what IDs we still need to pull, and pull them
-			let neededIds = [];
-			if (settings.ids) {
-				settings.ids.forEach(function(item, index) {
-					if (!self.elements.by_id[item] && !self.elements.by_namecat[item]) {
-						neededIds.push(item);
-					}
-				});
-			}
-			if (neededIds.length) {
-				CTE.fetchElements(self, neededIds);
-			}
+			CTE.fetchElements(self, settings.ids);
 
 			// Updates to our div
 			div.data('cte-name', settings.name);
@@ -82,14 +72,48 @@
 			return self;
 		},
 
-		// Given our object and an ID or array of IDs, query for those IDs and add them to our object
-		fetchElements: function(self, ids) {
-			return CTE.call_api(self.api_url, 'element/get', {ids: ids}).done(function(data) {
-				for (const [key, value] of Object.entries(data.response)) {
-					self.elements.by_id[key] ||= value;
-					self.elements.by_namecat[value.namecat] ||= value;
-				}
-			});
+		/* Given our object and an ID or array of IDs, query for the ones needed. Ensure that a
+		   resolved jquery deferred object is always returned so that we can act off of it if
+		   necessary.
+
+		   An optional third argument is a boolean value indicating whether or not to skip
+		   assessing and just pull everything requested - this can be useful, as requesting an
+		   ID will also return any associated IDs, so it's possible to have one of the ID in
+		   question without necessarily having all of the thing that might be returned. */
+		fetchElements: function(self, ids, force) {
+			if (typeof force === 'undefined') {
+				force = false;
+			}
+			if (typeof ids === 'undefined' || ids === null) {
+				return $.Deferred().resolve();
+			}
+
+			if (!Array.isArray(ids)) {
+				ids = [ids];
+			}
+
+			let neededIds = [];
+			if (force === true) {
+				neededIds = ids;
+			}
+			else {
+				ids.forEach(function(item, index) {
+					if (!self.elements.by_id[item] && !self.elements.by_namecat[item]) {
+						neededIds.push(item);
+					}
+				});
+			}
+
+			if (neededIds.length) {
+				return CTE.call_api(self.api_url, 'element/get', {ids: neededIds}).done(function(data) {
+					for (const [key, value] of Object.entries(data.response)) {
+						self.elements.by_id[key] ||= value;
+						self.elements.by_namecat[value.namecat] ||= value;
+					}
+				});
+			}
+
+			return $.Deferred().resolve();
 		},
 
 		// Return the boject containing element data. Return nothing if it's not in our data
@@ -106,6 +130,9 @@
 		actOnElement: function(self, id) {
 			let action;
 			if (!self.elements.by_id[id] && !self.elements.by_namecat[id]) {
+				/* Note that there is the potential here for a situation where we have a request for
+				   an element in flight at the time when we give the command to act on that element.
+				   In that circumstance we'll just request it again - should be no big deal. */
 				action = self.fetchElements(id);
 			}
 			action ||= $.Deferred().resolve();
@@ -172,6 +199,17 @@
 					}
 				}
 			},
+			note: function(self, element) {
+				return;
+			},
+			data: function(self, element) {
+				self.fetchElements(element.json.get, true);
+			},
+			series: function(self, element) {
+				/* Note to future self: In addition to queueing things up, we should also re-pull all
+				   elements of types that have associated elements, to ensure that their associated
+				   elements have been pulled. */
+			}
 		},
 	};
 

@@ -622,15 +622,6 @@ an array of strings indicating validators for what can be present.
 			cond  => [1, 'arrayOf(1,singleCondition)'],
 			arbit => [0, 'ignore'],
 		},
-		assess   => {
-			cond  => [1, 'singleCondition'],
-			after => [0, 'elementList'],
-			arbit => [0, 'ignore'],
-		},
-		negate   => {
-			assess_id => [1, 'elementList'],
-			arbit     => [0, 'ignore'],
-		},
 		stop     => {
 			arbit     => [0, 'ignore'],
 		},
@@ -909,24 +900,6 @@ sub listReferencedElements {
 			}
 		}
 	}
-	elsif ($type eq 'assess') {
-		if (@{$jsonRef->{cond}} > 1) {
-			if (ref $jsonRef->{cond}[1]) {
-				push @elements, @{$jsonRef->{cond}[1]};
-			}
-			else {
-				push @elements, $jsonRef->{cond}[1];
-			}
-		}
-	}
-	elsif ($type eq 'negate') {
-		if (ref $jsonRef->{assess_id}) {
-			push @elements, @{$jsonRef->{assess_id}};
-		}
-		else {
-			push @elements, $jsonRef->{assess_id};
-		}
-	}
 	elsif ($type eq 'choice') {
 		foreach my $choice (@{$jsonRef->{choices}}) {
 			if (exists $choice->{then}) {
@@ -989,13 +962,7 @@ sub listReferencedElements {
 	@elements = ();
 	my %verified;
 	foreach my $namecat (keys %element_namecats) {
-		my $element;
-		if ($type eq 'negate') {
-			$element = ConvoTreeEngine::Object::Element->findOrDie({namecat => $namecat, type => 'assess'});
-		}
-		else {
-			$element = ConvoTreeEngine::Object::Element->findOrDie({namecat => $namecat});
-		}
+		my $element = ConvoTreeEngine::Object::Element->findOrDie({namecat => $namecat});
 		my $id = $element->id;
 		push @elements, $id;
 		$verified{$id} = 1;
@@ -1004,12 +971,7 @@ sub listReferencedElements {
 	foreach my $id (keys %element_ids) {
 		push @elements, $id;
 		if ($verify_exists && !$verified{$id}) {
-			if ($type eq 'negate') {
-				ConvoTreeEngine::Object::Element->findOrDie({id => $id, type => 'assess'});
-			}
-			else {
-				ConvoTreeEngine::Object::Element->findOrDie({id => $id});
-			}
+			ConvoTreeEngine::Object::Element->findOrDie({id => $id});
 		}
 	}
 
@@ -1021,7 +983,7 @@ sub doNestedElements {
 
 	if (my @elements = $self->listReferencedElements(1)) {
 		my $type = $self->type;
-		if ($type eq 'if' || $type eq 'assess' || $type eq 'choice' || $type eq 'series' || $type eq 'random') {
+		if ($type eq 'if' || $type eq 'choice' || $type eq 'series' || $type eq 'random') {
 			my $my_id = $self->id;
 			require ConvoTreeEngine::Object::Element::Nested;
 			my $table = ConvoTreeEngine::Object::Element::Nested->_table();
@@ -1081,11 +1043,6 @@ sub sanitizeNesting {
 				if (@$cond > 1) {
 					$cond->[1] = $element->_sanitize_nesting_arrays($cond->[1], $args);
 				}
-			}
-		}
-		elsif ($type eq 'assess') {
-			if (@{$jsonRef->{cond}} > 1) {
-				$jsonRef->{cond}[1] = $element->_sanitize_nesting_arrays($jsonRef->{cond}[1], $args);
 			}
 		}
 		elsif ($type eq 'choice') {

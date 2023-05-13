@@ -173,57 +173,10 @@ $examples{if} = {
 	},
 };
 
-=head2 Assess
-
-Assesses allow the creator to indicate potential future branches of the story - either occurring
-immeidately after a specified story element, or after the story has been told to stop.
-
-=cut
-
-$examples{assess} = {
-	cond  => [
-		'var=0',
-		'1',
-	],
-	after => '1',
-	arbit => {
-		"Additional details" => {
-			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
-			"2" => '"assess" blocks are similar to "if" blocks, except that they will be assessed (In the order they were presented) only after a "stop" block has been reached',
-			"2.a" => '...or immediately after any of the blocks specified under the "after" key has been reached',
-			"3" => 'The "cond" key will be a single array containing either one or two strings',
-			"4" => 'The first string will contain one or more sets of a variable name, an operator, and a value',
-			"4.a" => 'Variable names may contain letters, numbers, underscores or periods',
-			"4.b" => 'Operators may be one of the following: "=", "!=", ">", "<", ">=", "<="',
-			"4.c" => 'The value must contain only letters, numbers, and underscores',
-			"4.d" => 'If there are multiple sets within within the first string, they will be separated by and ("&") or or ("|") operators',
-			"5" => 'The second string (if present) will contain either a single positive integer (representing a single element ID) or an array of positive integers',
-			"6" => 'If the first element within the array is null, it will be interpreted as returning true',
-		},
-	},
-};
-
-=head2 Negate
-
-Negates negate an assess blcok, preventing it from running before it potentially would.
-
-=cut
-
-$examples{negate} = {
-	assess_id => "2",
-	arbit     => {
-		"Additional details" => {
-			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
-			"2" => 'The "assess_id" will contain the ID of an "assess" block or an array with multiple IDs of assess blocks. This negate block will remove the specified assess block from the assess queue',
-		},
-	},
-};
-
 =head2 Stop
 
 Stops indicate that no further queued elements after this point should be displayed. They
-are cleared from the queue. At this point, we proceed through any pending assess blocks
-in the order in which they were presented.
+are cleared from the queue.
 
 =cut
 
@@ -231,7 +184,7 @@ $examples{stop} = {
 	arbit => {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
-			"2" => 'Remove all further elements from the queue to be processed; Begin processing elements in the "assess" queue.',
+			"2" => 'Remove all further elements from the queue to be processed',
 		},
 	},
 };
@@ -341,7 +294,7 @@ $examples{do} = {
 
 =head2 Data
 
-Datas indicate that more elements needs to be pulled from the server.
+Datas indicate that more elements need to be pulled from the server.
 
 =cut
 
@@ -357,7 +310,10 @@ $examples{data} = {
 
 =head2 Series
 
-Serieses are a list of consecutive elements, and potentially a list of other related elements.
+Serieses are a list of consecutive elements, and potentially a list of other related elements. This
+allows the creator to specify a series of elements that will be acted upon in order, and then
+refrence that series from multiple places rather than need to specify the elements individually each
+time.
 
 =cut
 
