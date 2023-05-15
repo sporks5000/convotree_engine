@@ -307,14 +307,14 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 	};
 	my $namecat = sub {
 		### Returns true if the value looks like a namecat
-		### A namecat must validate as 'words' followed by a colon, followed by 'words'. Either instance of 'words' can instead be an empty string, but not both
+		### A namecat must validate as 'dashWords' followed by a colon, followed by 'dashWords'. Either instance of 'dashWords' can instead be an empty string, but not both
 		### NOTE that while a namecat can be undefined, a undefined value DOES NOT validate as a namecat
 		my ($class, $value) = @_;
 		return 0 if $class->_validate_regex($value, ':', 1);
 		my ($cat, $name, @other) = split m/:/, $value;
 		return 0 if @other;
-		return 0 if $cat  && !$class->_validate_value($cat,  'words');
-		return 0 if $name && !$class->_validate_value($name, 'words');
+		return 0 if $cat  && !$class->_validate_value($cat,  'dashWords');
+		return 0 if $name && !$class->_validate_value($name, 'dashWords');
 		return 1;
 	};
 	my $elementList = sub {
@@ -325,8 +325,8 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 	my $itemTextNested = sub {
 		my ($class, $value) = @_;
 		return 0 unless $class->_validate_value($value, 'array');
-		### The first element will either be undefined or a string of words
-		return 0 if defined $value->[0] && !$class->_validate_value($value->[0], 'words');
+		### The first element will either be undefined or a string of dashWords
+		return 0 if defined $value->[0] && !$class->_validate_value($value->[0], 'dashWords');
 		### The second element must be undefined, or a string, or another item block
 		if (defined $value->[1]) {
 			return 0 unless $class->_validate_value($value->[1], ['string', 'arrayOf(1,itemTextNested)']);
@@ -343,10 +343,11 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 	my $itemTextHash = sub {
 		my ($class, $value) = @_;
 		return $class->_validate_value($value, 'hashOf', {
-			speaker => [0, 'words'],
+			speaker => [0, 'dashWords'],
 			text    => [1, ['string', 'arrayOf(1,itemTextNested)']],
-			classes => [0, 'words'],
+			classes => [0, 'dashWords'],
 			hover   => [0, 'string'],
+			frame   => [0, 'dashWords']
 		});
 	},
 	my $singleElement = sub {
@@ -559,7 +560,8 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 		hash            => $hash,
 		array           => $array,
 		variableName    => '^[a-zA-Z0-9_.]+\z', # What we expect from a javascript variable name
-		words           => '^(?:[a-zA-Z0-9_]+[ -]?)+\b\z', # A string of words separated by either single spaces or single hyphens
+		words           => '^(?:[a-zA-Z0-9_]+ ?)+\b\z', # A string of words separated by either single spaces
+		dashWords       => '^(?:[a-zA-Z0-9_]+[ -]?)+\b\z', # A string of words separated by either single spaces or single hyphens
 		word            => '^[a-zA-Z0-9_]+\z', # A single word containg letters numbers and/or underscores
 		string          => '^[^\x00-\x09\x0B\x0C\x0E-\x1F\x7F]*$', # No control characters other than "Line Feed" and "Carriage Return"
 		positiveInt     => '^[1-9][0-9]*\z', # Looks like a positive integer
@@ -859,7 +861,7 @@ sub _confirm_namecat {
 			$args->{$key} //= undef;
 		}
 		if (defined $args->{$key}) {
-			my $isValid = $invocant->_validate_value($args->{$key}, 'words');
+			my $isValid = $invocant->_validate_value($args->{$key}, 'dashWords');
 			unless ($isValid) {
 				my $failures = $invocant->_validation_failures;
 				ConvoTreeEngine::Exception::Input->throw(

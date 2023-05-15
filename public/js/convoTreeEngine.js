@@ -209,7 +209,26 @@
 				/* Note to future self: In addition to queueing things up, we should also re-pull all
 				   elements of types that have associated elements, to ensure that their associated
 				   elements have been pulled. */
-			}
+			},
+			item: function(self, element, additionalArgs) {
+				additionalArgs ||= {};
+				let text = element.json.textx;
+				if (typeof additionalArgs.active === 'undefined' || additionalArgs.active === true) {
+					text = element.json.text;
+				}
+
+				let delay = 500;
+				if (typeof element.json.delay !== 'undefined') {
+					delay = element.json.delay;
+				}
+
+				let prompt = true;
+				if (typeof element.json.prompt !== 'undefined') {
+					prompt = element.json.prompt;
+				}
+
+				// ##### TODO: More here
+			};
 		},
 	};
 

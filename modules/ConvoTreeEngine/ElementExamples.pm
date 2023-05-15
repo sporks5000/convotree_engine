@@ -24,6 +24,7 @@ $examples{item} = {
 		text    => 'A string of text potentially including "quoted bits", _underscored bits_, *starred bits*, and [bracketed bits].',
 		classes => 'html classes',
 		hover   => 'A string of text potentially including [bracketed bits].',
+		frame   => 'html classes',
 	},
 	textx    => {
 		speaker => 'html classes',
@@ -57,15 +58,16 @@ $examples{item} = {
 		],
 		classes => 'html classes',
 		hover   => 'A string of text potentially including [bracketed bits].',
+		frame   => 'html classes',
 	},
 	function => 'functionName',
-	delay    => '1000',
+	delay    => '500',
 	prompt   => JSON::false,
 	arbit    => {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
-			"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
-			"3" => 'The "prompt" key is optional. It contains a boolean value indicating whether to prompt before continuing',
+			"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause after this element before processing additional elements. Default: 500 ms',
+			"3" => 'The "prompt" key is optional. It contains a boolean value indicating whether to prompt before continuing. Default false',
 			"4" => 'If the "text" key will be given a hashref. If the "text" key within it is a string...',
 			"4.a" => 'Quoted bits will be put into a span and given the classes specified under "speaker"',
 			"4.b" => 'Underscored bits will be italicized',

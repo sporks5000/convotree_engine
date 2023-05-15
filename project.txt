@@ -116,20 +116,6 @@ If/Then Block:
 		},
 	]
 
-"Assess" block:
-	### An "assess" block is like an if/then block, except that it will be assessed on each page load until it has been assessed as true
-	[
-		{
-			type => 'assess',
-			cond => [
-				'var>4',
-				[
-					'<b>Robert:</b> This piece of text was not in the conversation previously, but it is now!'
-				],
-			]
-		}
-	]
-
 Updating variables:
 	[
 		'<b>Robert:</b> We're about to update some variables',
