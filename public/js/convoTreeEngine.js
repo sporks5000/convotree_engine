@@ -22,12 +22,16 @@
 		/* Given a div element, initiate a convoTreeEngine instance
 
 		Arguments:
-		- ids       - 
-		- div       - 
-		- name      - 
-		- api_url   - 
-		- elements  - 
-		- variables - 
+		- ids                 - 
+		- div                 - 
+		- name                - 
+		- api_url             - 
+		- elements            - 
+		- variables           - 
+		- activeChoiceFrame   - 
+		- activeItemFrame     - 
+		- inactiveChoiceFrame - 
+		- inactiveItemFrame   - 
 
 		*/
 		convoLaunch: function(settings) {
@@ -49,6 +53,9 @@
 				actOnElement: function(id) {return CTE.actOnElement(this, id);},
 			};
 			self.variables = settings.variables || {};
+			['activeChoiceFrame', 'activeItemFrame', 'inactiveChoiceFrame', 'inactiveItemFrame'].forEach(function(item, index) {
+				self[item] = settings[item] || [];
+			})
 			// Each time the current list enters a nested list, we can add it here; each
 			// time we get to the end of a list, we just go back to the previous one.
 			// ##### TODO: build upon this
@@ -211,9 +218,12 @@
 				   elements have been pulled. */
 			},
 			item: function(self, element, additionalArgs) {
-				additionalArgs ||= {};
+				additionalArgs ||= {
+					active: true,
+					choice: false,
+				};
 				let text = element.json.textx;
-				if (typeof additionalArgs.active === 'undefined' || additionalArgs.active === true) {
+				if (additionalArgs.active === true) {
 					text = element.json.text;
 				}
 
@@ -227,8 +237,71 @@
 					prompt = element.json.prompt;
 				}
 
+				let frameClass;
+				let frame = text.frame;
+				if (typeof frame === 'undefined') {
+					if (additionalArgs.active === true) {
+						if (additionalArgs.choice === true) {
+							frameClass = 'convoTreeEngine-choice-frame convoTreeEngine-active-frame';
+							frame = self.activeChoiceFrame;
+						}
+						else {
+							frameClass = 'convoTreeEngine-item-frame convoTreeEngine-active-frame';
+							frame = self.activeItemFrame;
+						}
+					}
+					else {
+						if (additionalArgs.choice === true) {
+							frameClass = 'convoTreeEngine-choice-frame convoTreeEngine-inactive-frame';
+							frame = self.inactiveChoiceFrame;
+						}
+						else {
+							frameClass = 'convoTreeEngine-item-frame convoTreeEngine-inactive-frame';
+							frame = self.inactiveItemFrame;
+						}
+					}
+				}
+
+				let htmlElement = $('<div>').addClass(frame).addClass(frameClass);
+				if (typeof text.hover !== 'undefined') {
+					let hover = CTE.utils.expandVariables(self, text.hover);
+					hover = CTE.utils.escapeStr(hover);
+					htmlElement.attr('title', hover);
+				}
+
 				// ##### TODO: More here
-			};
+			},
+		},
+
+		utils: {
+			escapeStr: function(str) {
+				return str.replace(/&/g, "&amp;")
+					.replace(/</g, "&lt;")
+					.replace(/>/g, "&gt;");
+			},
+			expandVariables: function(self, str) {
+				let vars = str.match(/\[[a-zA-Z0-9_.]+\]/g);
+				if (!vars || !vars.length) {
+					return str;
+				}
+				let chunks = str.split(/\[[a-zA-Z0-9_.]+\]/);
+				let modifiedString = chunks.shift();
+
+				while (vars.length) {
+					let variable = vars.shift();
+					let chunk = chunks.shift();
+					variable = variable.substring(1, variable.length - 1);
+
+					let value = self.variables[variable];
+					if (typeof value === 'undefined') {
+						value = '[]';
+					}
+
+					modifiedString += value + chunk;
+				}
+
+				return modifiedString;
+			},
 		},
 	};
 
