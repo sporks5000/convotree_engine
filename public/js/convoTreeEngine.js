@@ -265,7 +265,7 @@
 				let htmlDiv = $('<div>').addClass(frame).addClass(frameClass);
 				if (typeof text.hover !== 'undefined') {
 					let hover = CTE.utils.escapeStr(text.hover);
-					hover = CTE.utils.expandVariables(self, hover);
+					hover = CTE.utils.expandHoverTextVariables(self, hover);
 					htmlDiv.attr('title', hover);
 				}
 
@@ -288,41 +288,46 @@
 					.replace(/</g, '&lt;')
 					.replace(/>/g, '&gt;');
 			},
-			expandVariables: function(self, str) {
+			variableValueToDisplay: function(value) {
+				value = String(value);
+				value = CTE.utils.escapeStr(value);
+				return value.replace(/\r?\n\r?/g, '<br>')
+					.replace(/"/g, '&quot;');
+			},
+			expandHoverTextVariables: function(self, hover) {
 				/* Given a string of text that contains variable names contained within square brackets,
 				   replace each of those varaibles with the value of the variable. */
-				let vars = str.match(/\[[a-zA-Z0-9_.]+\]/g);
+				let vars = hover.match(/\[[a-zA-Z0-9_.]+\]/g);
 				if (!vars || !vars.length) {
-					return str;
+					return hover;
 				}
-				let chunks = str.split(/\[[a-zA-Z0-9_.]+\]/);
-				let modifiedString = chunks.shift();
+				let chunks = hover.split(/\[[a-zA-Z0-9_.]+\]/);
+				let modifiedHover = chunks.shift();
 
 				while (vars.length) {
-					let variable = vars.shift();
+					let varName = vars.shift();
 					let chunk = chunks.shift();
-					variable = variable.substring(1, variable.length - 1);
+					varName = varName.substring(1, varName.length - 1);
 
-					let value = self.variables[variable];
+					let value = self.variables[varName];
 					if (typeof value === 'undefined') {
 						value = '[UNDEFINED]';
 					}
 					value = String(value);
 					value = CTE.utils.escapeStr(value);
+					value = value.replace(/"/g, '&quot;');
 
-					modifiedString += value + chunk;
+					modifiedHover += value + chunk;
 				}
 
-				return modifiedString;
+				return modifiedHover;
 			},
 			expandItemText: function(self, speaker, htmlSpan, text) {
 				if (Array.isArray(text)) {
-					// ##### TODO: This thing
-
-					htmlSpan.append(innerContent);
+					htmlSpan = CTE.utils.handleNestedItemText(self, htmlSpan, text);
 				}
 				else {
-					let parsedText = CTE.utils.parseItemText(self, speaker, text);
+					const parsedText = CTE.utils.parseItemText(self, speaker, text);
 					htmlSpan.html(parsedText);
 				}
 
@@ -362,19 +367,52 @@
 				// replace variable names with their values
 				if (vars) {
 					while (vars.length) {
-						let variable = vars.shift();
-						variable = variable.substring(1, variable.length - 1);
-						let value = self.variables[variable];
+						let varName = vars.shift();
+						varName = varName.substring(1, varName.length - 1);
+						let value = self.variables[varName];
 						if (typeof value === 'undefined') {
 							value = '[UNDEFINED]';
 						}
-						value = String(value);
-						value = CTE.utils.escapeStr(value);
+						value = CTE.utils.variableValueToDisplay(value);
 						text = text.replace("\x03", value);
 					}
 				}
 
 				return text;
+			},
+			handleNestedItemText: function(self, htmlSpan, text) {
+				text.forEach(function(block, index) {
+					let classes = block[0];
+					let content = block[1];
+					let span = $('<span>')
+					if (classes !== null) {
+						span.addClass(classes);
+					}
+					if (content !== null) {
+						if (Array.isArray(content)) {
+							// It's more nested arrays
+							span = CTE.utils.handleNestedItemText(self, span, content);
+						}
+						else {
+							// It's a string of text, for which we'll do the bare minimal parsing
+							content = CTE.utils.variableValueToDisplay(content);
+							span.append(content);
+						}
+					}
+					else {
+						// null content means that there is a third element and it is the name of a variable
+						let varName = block[2];
+						content = self.variables[varName];
+						if (typeof content === 'undefined') {
+							content = '[UNDEFINED]';
+						}
+						content = CTE.utils.variableValueToDisplay(content);
+						span.append(content);
+					}
+					htmlSpan.append(span);
+				});
+
+				return htmlSpan;
 			},
 		},
 	};
