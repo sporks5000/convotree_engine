@@ -307,6 +307,7 @@
 					if (typeof value === 'undefined') {
 						value = '[UNDEFINED]';
 					}
+					value = String(value);
 					value = CTE.utils.escapeStr(value);
 
 					modifiedString += value + chunk;
@@ -330,33 +331,33 @@
 			parseItemText: function(self, speaker, text) {
 				/* Given a text string containing minimal markup, parse that markup and
 				   return a string of HTML*/
-				// In theory we can reply on none of the text being processed in this way
-				// including null characters, but just to be safe, we'llaccount for them
-				// anyway.
-				text = text.replace(/\x00/g, "\x00\x00") // replace all null characters
-					.replace(/\\\\/g, "\x00\x01")      // replace all escaped backslashes
-					.replace(/\\\[/g, "\x00\x02")      // replace all escaped opening square brackets
-					.replace(/\\\]/g, "\x00\x03")      // replace all escaped closing square brackets
-					.replace(/\r?\n\r?/g, '<br>');     // newline characters becomes linebreaks
+				// In theory we can rely on none of the text being processed in this way
+				// including control characters, so we will be using them as placeholders.
+				text = text.replace(/[\x01-\x04]/g, '') //remove the control characters we're using
+					.replace(/\\\\/g, "\x00")         // replace all escaped backslashes
+					.replace(/\\\[/g, "\x01")         // replace all escaped opening square brackets
+					.replace(/\\\]/g, "\x02");        // replace all escaped closing square brackets
 
 				// Separate out the variables; replace them with placeholders.
 				let vars = text.match(/\[[a-zA-Z0-9_.]+\]/g);
-				text = text.replace(/\[[a-zA-Z0-9_.]+\]/g, "\x00\x04")
-					.replace(/\x00\x02/g, '[')    // put opening square brackets back (unescaped this time)
-					.replace(/\x00\x03/g, ']');   // put closing square brackets back (unescaped this time)
+				text = text.replace(/\[[a-zA-Z0-9_.]+\]/g, "\x03")
+					.replace(/\x01/g, '[')  // put opening square brackets back (unescaped this time)
+					.replace(/\x02/g, ']'); // put closing square brackets back (unescaped this time)
 
 				// Make sure that we're html safe
 				text = CTE.utils.escapeStr(text);
 
-				text = text.replace(/\\_/g, "\x00\x02")     // replace all escaped underscores
+				text = text.replace(/\r?\n\r?/g, '<br>')    // newline characters becomes linebreaks
+					.replace(/\\_/g, "\x01")              // replace all escaped underscores
 					.replace(/_([^_]*)_/g, "<i>$1</i>")   // italicize text within underscores
-					.replace(/\x00\x02/g, '_')            // put underscores back, unescaped
-					.replace(/\\\*/g, "\x00\x02")         // replace all escaped asterisks
+					.replace(/\x01/g, '_')                // put underscores back, unescaped
+					.replace(/\\\*/g, "\x01")             // replace all escaped asterisks
 					.replace(/\*([^*]*)\*/g, "<b>$1</b>") // bold text within asterisks
-					.replace(/\x00\x02/g, '*')            // put asterisks back
-					.replace(/\\"/g, "\x00\x02")          // replace all escaped quotes
+					.replace(/\x01/g, '*')                // put asterisks back
+					.replace(/\\"/g, "\x01")              // replace all escaped quotes
 					.replace(/"([^"]*)"/g, '<span class="' + speaker + '">&quot;' + "$1" + '&quot;</span>') // quotes in spans
-					.replace(/\x00\x02/g, '&quot;');
+					.replace(/\x01/g, '&quot;')           // bring back quotation marks
+					.replace(/\x00/g, '\\');              // bring back backslashes
 
 				// replace variable names with their values
 				if (vars) {
@@ -367,12 +368,11 @@
 						if (typeof value === 'undefined') {
 							value = '[UNDEFINED]';
 						}
+						value = String(value);
 						value = CTE.utils.escapeStr(value);
-						text.replace("\x00\x04", variable);
+						text = text.replace("\x03", value);
 					}
 				}
-
-				text = text.replace(/\x00\x00/g, "\x00");
 
 				return text;
 			},
