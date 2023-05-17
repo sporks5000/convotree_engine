@@ -262,24 +262,35 @@
 					}
 				}
 
-				let htmlElement = $('<div>').addClass(frame).addClass(frameClass);
+				let htmlDiv = $('<div>').addClass(frame).addClass(frameClass);
 				if (typeof text.hover !== 'undefined') {
-					let hover = CTE.utils.expandVariables(self, text.hover);
-					hover = CTE.utils.escapeStr(hover);
-					htmlElement.attr('title', hover);
+					let hover = CTE.utils.escapeStr(text.hover);
+					hover = CTE.utils.expandVariables(self, hover);
+					htmlDiv.attr('title', hover);
 				}
 
-				// ##### TODO: More here
+				let htmlSpan = $('<span>');
+				if (typeof text.classes !== 'undefined') {
+					htmlSpan.addClass(text.classes);
+				}
+
+				let speaker = text.speaker || '';
+
+				htmlSpan = CTE.utils.expandItemText(self, speaker, htmlSpan, text.text);
+				htmlDiv.append(htmlSpan);
+				// ##### TODO: add the div to the page
 			},
 		},
 
 		utils: {
 			escapeStr: function(str) {
-				return str.replace(/&/g, "&amp;")
-					.replace(/</g, "&lt;")
-					.replace(/>/g, "&gt;");
+				return str.replace(/&/g, '&amp;')
+					.replace(/</g, '&lt;')
+					.replace(/>/g, '&gt;');
 			},
 			expandVariables: function(self, str) {
+				/* Given a string of text that contains variable names contained within square brackets,
+				   replace each of those varaibles with the value of the variable. */
 				let vars = str.match(/\[[a-zA-Z0-9_.]+\]/g);
 				if (!vars || !vars.length) {
 					return str;
@@ -294,13 +305,76 @@
 
 					let value = self.variables[variable];
 					if (typeof value === 'undefined') {
-						value = '[]';
+						value = '[UNDEFINED]';
 					}
+					value = CTE.utils.escapeStr(value);
 
 					modifiedString += value + chunk;
 				}
 
 				return modifiedString;
+			},
+			expandItemText: function(self, speaker, htmlSpan, text) {
+				if (Array.isArray(text)) {
+					// ##### TODO: This thing
+
+					htmlSpan.append(innerContent);
+				}
+				else {
+					let parsedText = CTE.utils.parseItemText(self, speaker, text);
+					htmlSpan.html(parsedText);
+				}
+
+				return htmlSpan;
+			},
+			parseItemText: function(self, speaker, text) {
+				/* Given a text string containing minimal markup, parse that markup and
+				   return a string of HTML*/
+				// In theory we can reply on none of the text being processed in this way
+				// including null characters, but just to be safe, we'llaccount for them
+				// anyway.
+				text = text.replace(/\x00/g, "\x00\x00") // replace all null characters
+					.replace(/\\\\/g, "\x00\x01")      // replace all escaped backslashes
+					.replace(/\\\[/g, "\x00\x02")      // replace all escaped opening square brackets
+					.replace(/\\\]/g, "\x00\x03")      // replace all escaped closing square brackets
+					.replace(/\r?\n\r?/g, '<br>');     // newline characters becomes linebreaks
+
+				// Separate out the variables; replace them with placeholders.
+				let vars = text.match(/\[[a-zA-Z0-9_.]+\]/g);
+				text = text.replace(/\[[a-zA-Z0-9_.]+\]/g, "\x00\x04")
+					.replace(/\x00\x02/g, '[')    // put opening square brackets back (unescaped this time)
+					.replace(/\x00\x03/g, ']');   // put closing square brackets back (unescaped this time)
+
+				// Make sure that we're html safe
+				text = CTE.utils.escapeStr(text);
+
+				text = text.replace(/\\_/g, "\x00\x02")     // replace all escaped underscores
+					.replace(/_([^_]*)_/g, "<i>$1</i>")   // italicize text within underscores
+					.replace(/\x00\x02/g, '_')            // put underscores back, unescaped
+					.replace(/\\\*/g, "\x00\x02")         // replace all escaped asterisks
+					.replace(/\*([^*]*)\*/g, "<b>$1</b>") // bold text within asterisks
+					.replace(/\x00\x02/g, '*')            // put asterisks back
+					.replace(/\\"/g, "\x00\x02")          // replace all escaped quotes
+					.replace(/"([^"]*)"/g, '<span class="' + speaker + '">&quot;' + "$1" + '&quot;</span>') // quotes in spans
+					.replace(/\x00\x02/g, '&quot;');
+
+				// replace variable names with their values
+				if (vars) {
+					while (vars.length) {
+						let variable = vars.shift();
+						variable = variable.substring(1, variable.length - 1);
+						let value = self.variables[variable];
+						if (typeof value === 'undefined') {
+							value = '[UNDEFINED]';
+						}
+						value = CTE.utils.escapeStr(value);
+						text.replace("\x00\x04", variable);
+					}
+				}
+
+				text = text.replace(/\x00\x00/g, "\x00");
+
+				return text;
 			},
 		},
 	};

@@ -70,13 +70,18 @@ $examples{item} = {
 			"3" => 'The "prompt" key is optional. It contains a boolean value indicating whether to prompt before continuing. Default false',
 			"4" => 'If the "text" key will be given a hashref. If the "text" key within it is a string...',
 			"4.a" => 'Quoted bits will be put into a span and given the classes specified under "speaker"',
+			"4.a.1" => 'This will only apply to double quotes, not single quotes, smart quotes, or any other variety of quotes.',
 			"4.b" => 'Underscored bits will be italicized',
 			"4.c" => 'Starred bits will be bolded',
 			"4.d" => 'Text within bracketed bits will be interpreted as a variable name, and replaced with the value of that variable',
+			"4.e" => 'Newline characters will be replaced with html line breaks',
+			"4.f" => 'Quotation marks, underscores, asterisks, square brackets, and backslashes preceeded by a backslash ("\") will be output as normal and not parsed.',
 			"5" => 'If the "text" key within it is an arrayref...',
 			"5.a" => 'It will contain any number of array refs',
 			"5.b" => 'The first element in these will be a string of html classes to apply to the span',
 			"5.c" => 'The second element will either be a string of text, or another arrayref of arrayrefs, nested as deeply as the creator needs',
+			"5.c.1" => 'If the second element is a string of text, it will not be parsed in any way, except to sanitize characters that might be interpreted as HTML...',
+			"5.C.2" => '...and to replace newline characters with html line breaks.',
 			"5.d" => 'If the second string is null, a third string can include the name of a variable. the value of that variable will be displayed',
 			"6" => 'The "hover" key in the "text" hashref will be text that is visible on mouseover',
 			"7" => 'The "classes" key in the "text" hashref will be the html classes applied to the block as a whole',
@@ -129,11 +134,11 @@ Enters and exits allow us to display items (or other story elements) within nest
 $examples{enter} = {
 	start => "A string of text to begin a block. Example: '<div class=\"thing\">'\nUntil an \"exit\" block with the same name (or a null name) is reached, content will be placed within this block",
 	end   => "A string of text to end a block. Example: '</div>'",
-	name  => "One or more space or hyphen-separated words with no special characters except underscores",
+	name  => "One or more space separated words with no special characters except underscores",
 	arbit => 'Optional; arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 };
 $examples{exit} = {
-	name  => "One or more space or hyphen-separated words with no special characters except underscores",
+	name  => "One or more space separated words with no special characters except underscores",
 	all   => 1,
 	arbit => {
 		"Additional details" => {
