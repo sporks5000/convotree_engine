@@ -83,12 +83,17 @@
 		},
 
 		/* A note on how the queue works:
+
 		   The queue is an object containing two keys: "nested_in" and "current". "Current" is
 		   an array containing either element IDs or namecats. We act on these elements one at
 		   a time until we reach the end of the array; as we act on the elements we remove them
 		   from the array. Some elements will add additional element IDs or namecats to the
 		   array. When we reach the end of the array, if "nested_in" is populated, we replace
-		   self.queue with self.queue.nested_in, and continue processing from there. */
+		   self.queue with self.queue.nested_in, and continue processing from there.
+
+		   If an elements attempts to add IDs to the "current" array, but that array already
+		   has at least one ID in it, it will instead nest itself - the opposite of what is
+		   described above. */
 
 
 
@@ -163,7 +168,7 @@
 					// ##### TODO: Should we throw some kind of error if the element does exist even after we called for it?
 					return;
 				}
-				CTE.parse[element.type](self, element);
+				CTE.elementTypes[element.type](self, element);
 			});
 		},
 
@@ -179,7 +184,7 @@
 			}
 		},
 
-		parse: {
+		elementTypes: {
 			variable: function(self, element) {
 				for (let [key, value] of Object.entries(element.json.update)) {
 					if (typeof value === 'number') {
@@ -229,12 +234,19 @@
 						self.variables[key] = value;
 					}
 				}
+
+				// Always go straight into the next element from this element type
+				self.actOnNextElement();
 			},
 			note: function(self, element) {
 				return;
+				// Always go straight into the next element from this element type
+				self.actOnNextElement();
 			},
 			data: function(self, element) {
 				self.fetchElements(element.json.get, true);
+				// Always go straight into the next element from this element type
+				self.actOnNextElement();
 			},
 			series: function(self, element) {
 				/* Note to future self: In addition to queueing things up, we should also re-pull all
@@ -247,7 +259,8 @@
 				additionalArgs.choice ??= false;
 
 				let text = additionalArgs.active === true ? element.json.text : element.json.textx;
-				const delay = element.json.delay ?? 500;
+				let delay = element.json.delay ?? 500;
+				delay = Number(delay);
 				const prompt = element.json.prompt ?? true;
 				const funcName = element.json.function ?? null;
 
@@ -315,7 +328,7 @@
 				if (additionalArgs.choice === true) {
 					if (funcName !== null) {
 						if (self.functions[funcName]) {
-							self.functions[funcName]({
+							htmlDiv = self.functions[funcName]({
 								self: self,
 								htmlDiv: htmlDiv,
 								element: element,
@@ -326,7 +339,27 @@
 					return htmlDiv;
 				}
 
-				// ##### TODO: Display the thing
+				setTimeout(function() {
+					// If there is a function, we want to process it right before we display rather
+					// than before we start the delay.
+					if (funcName !== null) {
+						if (self.functions[funcName]) {
+							htmlDiv = self.functions[funcName]({
+								self: self,
+								htmlDiv: htmlDiv,
+								element: element,
+								active: additionalArgs.active,
+							});
+						}
+					}
+
+					self.div.append(htmlDiv);
+					if (prompt === false) {
+						self.actOnNextElement();
+					}
+
+					// ##### TODO : Prompt
+				}, delay);
 			},
 		},
 
