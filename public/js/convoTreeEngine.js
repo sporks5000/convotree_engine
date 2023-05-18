@@ -22,7 +22,7 @@
 		/* Given a div element, initiate a convoTreeEngine instance
 
 		Arguments:
-		- ids                 - 
+		- queue               - 
 		- div                 - 
 		- name                - 
 		- api_url             - 
@@ -37,12 +37,15 @@
 		*/
 		convoLaunch: function(settings) {
 			var div = $(settings.div);
-			if (settings.ids && !Array.isArray(settings.ids)) {
-				settings.ids = [settings.ids];
+			if (settings.queue && !Array.isArray(settings.queue)) {
+				settings.queue = [settings.queue];
 			}
 			var self = CTE.instances[settings.name] = {
 				div: div,
-				list: settings.ids,
+				queue: {
+					nested_in: null,
+					current: settings.queue,
+				},
 				name: settings.name,
 				api_url: settings.api_url,
 				elements: {
@@ -52,7 +55,7 @@
 				getElement: function(id) {return CTE.getElement(this, id);},
 				fetchElements: function(ids, force) {return CTE.fetchElements(this, ids, force);},
 				actOnElement: function(id) {return CTE.actOnElement(this, id);},
-				actOnNextElement: function() {return CTE.actOnElement(this);},
+				actOnNextElement: function() {return CTE.actOnNextElement(this);},
 			};
 			['variables', 'functions'].forEach(function(item, index) {
 				self[item] = settings[item] || {};
@@ -60,10 +63,6 @@
 			['activeChoiceFrame', 'activeItemFrame', 'inactiveChoiceFrame', 'inactiveItemFrame'].forEach(function(item, index) {
 				self[item] = settings[item] || null;
 			});
-			// Each time the current list enters a nested list, we can add it here; each
-			// time we get to the end of a list, we just go back to the previous one.
-			// ##### TODO: build upon this
-			self.curList = [self.list];
 
 			// If we were passed pre-cooked elements, store those
 			if (settings.elements) {
@@ -74,7 +73,7 @@
 			}
 
 			// Determine what IDs we still need to pull, and pull them
-			CTE.fetchElements(self, settings.ids);
+			CTE.fetchElements(self, settings.queue);
 
 			// Updates to our div
 			div.data('cte-name', settings.name);
@@ -82,6 +81,16 @@
 
 			return self;
 		},
+
+		/* A note on how the queue works:
+		   The queue is an object containing two keys: "nested_in" and "current". "Current" is
+		   an array containing either element IDs or namecats. We act on these elements one at
+		   a time until we reach the end of the array; as we act on the elements we remove them
+		   from the array. Some elements will add additional element IDs or namecats to the
+		   array. When we reach the end of the array, if "nested_in" is populated, we replace
+		   self.queue with self.queue.nested_in, and continue processing from there. */
+
+
 
 		/* Given our object and an ID or array of IDs, query for the ones needed. Ensure that a
 		   resolved jquery deferred object is always returned so that we can act off of it if
@@ -150,7 +159,6 @@
 
 			return action.done(function() {
 				const element = self.getElement(id);
-				console.log({element:element}); // ##### TODO: remove this
 				if (!element) {
 					// ##### TODO: Should we throw some kind of error if the element does exist even after we called for it?
 					return;
@@ -161,8 +169,14 @@
 
 		actOnNextElement: function(self) {
 			/* Get the next element from the queue, then act on that element */
+			while (self.queue.nested_in && !self.queue.current.length) {
+				self.queue = self.queue.nested_in;
+			}
 
-			// ##### TODO: This
+			if (self.queue.current.length) {
+				const id = self.queue.current.shift();
+				return self.actOnElement(id);
+			}
 		},
 
 		parse: {
