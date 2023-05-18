@@ -29,10 +29,13 @@
 		- elements            - 
 		- variables           - 
 		- functions           - 
+		- activePromptFrame   - 
 		- activeChoiceFrame   - 
 		- activeItemFrame     - 
+		- inactivePromptFrame - 
 		- inactiveChoiceFrame - 
 		- inactiveItemFrame   - 
+		- defaultPrompt       - 
 
 		*/
 		convoLaunch: function(settings) {
@@ -60,9 +63,10 @@
 			['variables', 'functions'].forEach(function(item, index) {
 				self[item] = settings[item] || {};
 			});
-			['activeChoiceFrame', 'activeItemFrame', 'inactiveChoiceFrame', 'inactiveItemFrame'].forEach(function(item, index) {
+			['activePromptFrame', 'activeChoiceFrame', 'activeItemFrame', 'inactivePromptFrame', 'inactiveChoiceFrame', 'inactiveItemFrame'].forEach(function(item, index) {
 				self[item] = settings[item] || null;
 			});
+			self.defaultPrompt = settings.defaultPrompt ?? '...';
 
 			// If we were passed pre-cooked elements, store those
 			if (settings.elements) {
@@ -118,7 +122,7 @@
 			}
 
 			let neededIds = [];
-			if (force === true) {
+			if (force == true) {
 				neededIds = ids;
 			}
 			else {
@@ -256,25 +260,33 @@
 			item: function(self, element, additionalArgs) {
 				additionalArgs ||= {};
 				additionalArgs.active ??= true;
-				additionalArgs.choice ??= false;
+				additionalArgs.type ??= 'item';
 
-				let text = additionalArgs.active === true ? element.json.text : element.json.textx;
+				let text = additionalArgs.active == true ? element.json.text : element.json.textx;
 				let delay = element.json.delay ?? 500;
 				delay = Number(delay);
-				const prompt = element.json.prompt ?? true;
+				let prompt = element.json.prompt ?? true;
 				const funcName = element.json.function ?? null;
 
 				// Create the div that will contain the item text
-				let htmlDiv = $('<div>')
+				let htmlDiv = $('<div>');
+
+				if (typeof text === 'string') {
+					text = {text: text};
+				}
 
 				// Determine what classes we will be using and then apply thme to the div if applicable
 				let frameClass;
 				let frame = text.frame;
 				if (typeof frame === 'undefined') {
-					if (additionalArgs.active === true) {
-						if (additionalArgs.choice === true) {
+					if (additionalArgs.active == true) {
+						if (additionalArgs.type === 'choice') {
 							frameClass = 'convoTreeEngine-choice-frame convoTreeEngine-active-frame';
 							frame = self.activeChoiceFrame;
+						}
+						if (additionalArgs.type === 'prompt') {
+							frameClass = 'convoTreeEngine-prompt-frame convoTreeEngine-active-frame';
+							frame = self.activePromptFrame;
 						}
 						else {
 							frameClass = 'convoTreeEngine-item-frame convoTreeEngine-active-frame';
@@ -282,9 +294,13 @@
 						}
 					}
 					else {
-						if (additionalArgs.choice === true) {
+						if (additionalArgs.type === 'choice') {
 							frameClass = 'convoTreeEngine-choice-frame convoTreeEngine-inactive-frame';
 							frame = self.inactiveChoiceFrame;
+						}
+						if (additionalArgs.type === 'prompt') {
+							frameClass = 'convoTreeEngine-prompt-frame convoTreeEngine-inactive-frame';
+							frame = self.inactivePromptFrame;
 						}
 						else {
 							frameClass = 'convoTreeEngine-item-frame convoTreeEngine-inactive-frame';
@@ -323,9 +339,9 @@
 				}
 				htmlDiv.append(htmlSpan);
 
-				// If we're in a choice, process against the function (if any), and then return
-				// the htmlDiv.
-				if (additionalArgs.choice === true) {
+				// If we're in anythin other than an item , process against the function (if any), and
+				// then return the htmlDiv. We ignore both 'delay' and 'prompt'.
+				if (additionalArgs.type !== 'item') {
 					if (funcName !== null) {
 						if (self.functions[funcName]) {
 							htmlDiv = self.functions[funcName]({
@@ -354,11 +370,22 @@
 					}
 
 					self.div.append(htmlDiv);
-					if (prompt === false) {
-						self.actOnNextElement();
+					if (prompt == false) {
+						return self.actOnNextElement();
+					}
+					else if (prompt == true) {
+						prompt = self.defaultPrompt;
 					}
 
-					// ##### TODO : Prompt
+					// Generate the div for the prompt in the same way that we generate the div for
+					// the item itself
+					let promptDiv = CTE.elementTypes.item(self, {
+						json: {
+							text: prompt,
+						},
+					}, {type: 'prompt'});
+
+					self.div.append(promptDiv);
 				}, delay);
 			},
 		},

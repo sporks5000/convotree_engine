@@ -591,11 +591,11 @@ an array of strings indicating validators for what can be present.
 
 	%typeValidation = (
 		item     => {
-			text     => [1, 'itemTextHash'],
-			textx    => [0, 'itemTextHash'],
+			text     => [1, ['string', 'itemTextHash']],
+			textx    => [0, ['string', 'itemTextHash']],
 			function => [0, 'word'],
 			delay    => [0, 'positiveInt'],
-			prompt   => [0, 'boolean'],
+			prompt   => [0, ['boolean', 'string', 'itemTextHash']],
 			arbit    => [0, 'ignore'],
 		},
 		note     => {
