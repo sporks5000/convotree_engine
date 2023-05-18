@@ -28,6 +28,7 @@
 		- api_url             - 
 		- elements            - 
 		- variables           - 
+		- functions           - 
 		- activeChoiceFrame   - 
 		- activeItemFrame     - 
 		- inactiveChoiceFrame - 
@@ -51,11 +52,14 @@
 				getElement: function(id) {return CTE.getElement(this, id);},
 				fetchElements: function(ids, force) {return CTE.fetchElements(this, ids, force);},
 				actOnElement: function(id) {return CTE.actOnElement(this, id);},
+				actOnNextElement: function() {return CTE.actOnElement(this);},
 			};
-			self.variables = settings.variables || {};
+			['variables', 'functions'].forEach(function(item, index) {
+				self[item] = settings[item] || {};
+			});
 			['activeChoiceFrame', 'activeItemFrame', 'inactiveChoiceFrame', 'inactiveItemFrame'].forEach(function(item, index) {
-				self[item] = settings[item] || [];
-			})
+				self[item] = settings[item] || null;
+			});
 			// Each time the current list enters a nested list, we can add it here; each
 			// time we get to the end of a list, we just go back to the previous one.
 			// ##### TODO: build upon this
@@ -155,6 +159,12 @@
 			});
 		},
 
+		actOnNextElement: function(self) {
+			/* Get the next element from the queue, then act on that element */
+
+			// ##### TODO: This
+		},
+
 		parse: {
 			variable: function(self, element) {
 				for (let [key, value] of Object.entries(element.json.update)) {
@@ -218,25 +228,19 @@
 				   elements have been pulled. */
 			},
 			item: function(self, element, additionalArgs) {
-				additionalArgs ||= {
-					active: true,
-					choice: false,
-				};
-				let text = element.json.textx;
-				if (additionalArgs.active === true) {
-					text = element.json.text;
-				}
+				additionalArgs ||= {};
+				additionalArgs.active ??= true;
+				additionalArgs.choice ??= false;
 
-				let delay = 500;
-				if (typeof element.json.delay !== 'undefined') {
-					delay = element.json.delay;
-				}
+				let text = additionalArgs.active === true ? element.json.text : element.json.textx;
+				const delay = element.json.delay ?? 500;
+				const prompt = element.json.prompt ?? true;
+				const funcName = element.json.function ?? null;
 
-				let prompt = true;
-				if (typeof element.json.prompt !== 'undefined') {
-					prompt = element.json.prompt;
-				}
+				// Create the div that will contain the item text
+				let htmlDiv = $('<div>')
 
+				// Determine what classes we will be using and then apply thme to the div if applicable
 				let frameClass;
 				let frame = text.frame;
 				if (typeof frame === 'undefined') {
@@ -261,8 +265,14 @@
 						}
 					}
 				}
+				if (frame && frame.length) {
+					htmlDiv.addClass(frame);
+				}
+				if (frameClass.length) {
+					htmlDiv.addClass(frameClass);
+				}
 
-				let htmlDiv = $('<div>').addClass(frame).addClass(frameClass);
+				// Apply hover text if applicable
 				if (typeof text.hover !== 'undefined') {
 					let hover = CTE.utils.escapeStr(text.hover);
 					hover = CTE.utils.expandHoverTextVariables(self, hover);
@@ -274,21 +284,50 @@
 					htmlSpan.addClass(text.classes);
 				}
 
-				let speaker = text.speaker || '';
-
-				htmlSpan = CTE.utils.expandItemText(self, speaker, htmlSpan, text.text);
+				// The text for an item can be provided in one of two formats. Determine which is
+				// the case, put it together, and add it to the htmlDiv
+				if (Array.isArray(text.text)) {
+					htmlSpan = CTE.utils.handleNestedItemText(self, htmlSpan, text.text);
+				}
+				else {
+					const speaker = text.speaker || '';
+					const parsedText = CTE.utils.parseItemText(self, speaker, text.text);
+					htmlSpan.html(parsedText);
+				}
 				htmlDiv.append(htmlSpan);
-				// ##### TODO: add the div to the page
+
+				// If we're in a choice, process against the function (if any), and then return
+				// the htmlDiv.
+				if (additionalArgs.choice === true) {
+					if (funcName !== null) {
+						if (self.functions[funcName]) {
+							self.functions[funcName]({
+								self: self,
+								htmlDiv: htmlDiv,
+								element: element,
+								active: additionalArgs.active,
+							});
+						}
+					}
+					return htmlDiv;
+				}
+
+				// ##### TODO: Display the thing
 			},
 		},
 
 		utils: {
 			escapeStr: function(str) {
+				/* Convert the following characters to their html-code equivalents: "&", "<", ">" */
 				return str.replace(/&/g, '&amp;')
 					.replace(/</g, '&lt;')
 					.replace(/>/g, '&gt;');
 			},
 			variableValueToDisplay: function(value) {
+				/* Given the value of a variable, prepare it to be displayed as part of a item. Make
+				   sure it's defined, make sure it's a string, make sure it's escaped appropriately,
+				   etc. */
+				value ??= '[UNDEFINED]';
 				value = String(value);
 				value = CTE.utils.escapeStr(value);
 				return value.replace(/\r?\n\r?/g, '<br>')
@@ -310,9 +349,9 @@
 					varName = varName.substring(1, varName.length - 1);
 
 					let value = self.variables[varName];
-					if (typeof value === 'undefined') {
-						value = '[UNDEFINED]';
-					}
+					// The below code reproduces SOME of the actions within variableValueToDisplay.
+					// Specifically we do NOT want to replace linebreaks with '<br>' tags.
+					value ??= '[UNDEFINED]';
 					value = String(value);
 					value = CTE.utils.escapeStr(value);
 					value = value.replace(/"/g, '&quot;');
@@ -321,17 +360,6 @@
 				}
 
 				return modifiedHover;
-			},
-			expandItemText: function(self, speaker, htmlSpan, text) {
-				if (Array.isArray(text)) {
-					htmlSpan = CTE.utils.handleNestedItemText(self, htmlSpan, text);
-				}
-				else {
-					const parsedText = CTE.utils.parseItemText(self, speaker, text);
-					htmlSpan.html(parsedText);
-				}
-
-				return htmlSpan;
 			},
 			parseItemText: function(self, speaker, text) {
 				/* Given a text string containing minimal markup, parse that markup and
@@ -370,9 +398,6 @@
 						let varName = vars.shift();
 						varName = varName.substring(1, varName.length - 1);
 						let value = self.variables[varName];
-						if (typeof value === 'undefined') {
-							value = '[UNDEFINED]';
-						}
 						value = CTE.utils.variableValueToDisplay(value);
 						text = text.replace("\x03", value);
 					}
@@ -381,6 +406,8 @@
 				return text;
 			},
 			handleNestedItemText: function(self, htmlSpan, text) {
+				/* Given item text that is in the "nested array" format, process it out into the html that
+				   we'll be displaying. See modules/ConvoTreeEngine/ElementExamples.pm for details */
 				text.forEach(function(block, index) {
 					let classes = block[0];
 					let content = block[1];
@@ -403,9 +430,6 @@
 						// null content means that there is a third element and it is the name of a variable
 						let varName = block[2];
 						content = self.variables[varName];
-						if (typeof content === 'undefined') {
-							content = '[UNDEFINED]';
-						}
 						content = CTE.utils.variableValueToDisplay(content);
 						span.append(content);
 					}
