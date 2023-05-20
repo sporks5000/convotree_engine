@@ -443,12 +443,19 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 		}
 		return 1;
 	};
+	my $condition = sub {
+		my ($class, $value) = @_;
+		return 0 unless $class->_validate_value($value, ['undefined', 'conditionString', 'conditionBlock', 'arrayOf(condition)']);
+		return 1;
+	};
 	my $conditionBlock = sub {
 		my ($class, $value) = @_;
 		return 0 unless $class->_validate_value($value, 'hashOf', {
-			and => [0, ['conditionString', 'conditionBlock', 'arrayOf(conditionString,conditionBlock)']],
-			or  => [0, ['conditionString', 'conditionBlock', 'arrayOf(conditionString,conditionBlock)']],
-			xor => [0, ['conditionString', 'conditionBlock', 'arrayOf(conditionString,conditionBlock)']],
+			not  => [0, 'condition'],
+			and  => [0, 'condition'],
+			or   => [0, 'condition'],
+			xor  => [0, 'condition'],
+			xand => [0, 'condition'],
 		});
 		### Make sure it contains at least one of the above keys
 		return 1 unless scalar keys %$value == 0;
@@ -458,7 +465,7 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 		my ($class, $value) = @_;
 		return 0 unless $class->_validate_value($value, 'array');
 		### The first element will either be undefined or a condition string
-		return 0 unless $class->_validate_value($value->[0], ['undefined', 'conditionString', 'conditionBlock']);
+		return 0 unless $class->_validate_value($value->[0], 'condition');
 		return 0 if @$value > 2;
 		return 1 unless @$value == 2;
 		### If the second element is present, it should be an element ID or an array of element IDs
@@ -481,9 +488,11 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 	my $choice = sub {
 		my ($class, $value) = @_;
 		return 0 unless $class->_validate_value($value, 'hashOf', {
-			cond    => [0, ['undefined', 'conditionString', 'conditionBlock']],
-			element => [1, ['positiveInt', 'namecat']],
-			then    => [0, 'elementList'],
+			cond          => [0, 'condition'],
+			element       => [1, ['positiveInt', 'namecat']],
+			then          => [0, 'elementList'],
+			disp_inactive => [0, 'boolean'],
+			arbit         => [0, 'ignore'],
 		});
 		### The element MUST be of type "item"
 		return 1 unless $STRICT_ITEM_TYPE_VALIDATION;
@@ -571,6 +580,7 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 		itemTextNested  => $itemTextNested,
 		itemTextHash    => $itemTextHash,
 		singleElement   => $singleElement,
+		condition       => $condition,
 		conditionString => $conditionString,
 		conditionBlock  => $conditionBlock,
 		singleCondition => $singleCondition,
@@ -591,11 +601,11 @@ an array of strings indicating validators for what can be present.
 
 	%typeValidation = (
 		item     => {
-			text     => [1, ['string', 'itemTextHash']],
-			textx    => [0, ['string', 'itemTextHash']],
+			text     => [1, ['string', 'arrayOf(1,itemTextNested)', 'itemTextHash']],
+			textx    => [0, ['string', 'arrayOf(1,itemTextNested)', 'itemTextHash']],
 			function => [0, 'word'],
 			delay    => [0, 'positiveInt'],
-			prompt   => [0, ['boolean', 'string', 'itemTextHash']],
+			prompt   => [0, ['boolean', 'string', 'arrayOf(1,itemTextNested)', 'itemTextHash']],
 			arbit    => [0, 'ignore'],
 		},
 		note     => {
@@ -633,6 +643,7 @@ an array of strings indicating validators for what can be present.
 		},
 		choice   => {
 			choices => [1, 'arrayOf(1,choice)'],
+			delay   => [0, 'positiveInt'],
 			arbit   => [0, 'ignore'],
 		},
 		display  => {

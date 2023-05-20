@@ -54,11 +54,13 @@
 				elements: {
 					by_id: {},
 					by_namecat: {},
+					seen: {},
 				},
 				getElement: function(id) {return CTE.getElement(this, id);},
 				fetchElements: function(ids, force) {return CTE.fetchElements(this, ids, force);},
 				actOnElement: function(id) {return CTE.actOnElement(this, id);},
 				actOnNextElement: function() {return CTE.actOnNextElement(this);},
+				hasSeenElement: function(ident) {return CTE.hasSeenElement(this, ident);},
 			};
 			['variables', 'functions'].forEach(function(item, index) {
 				self[item] = settings[item] || {};
@@ -79,11 +81,18 @@
 			// Determine what IDs we still need to pull, and pull them
 			CTE.fetchElements(self, settings.queue);
 
+			CTE.setupEventListeners(self, div);
+
 			// Updates to our div
 			div.data('cte-name', settings.name);
 			div.addClass('cte-container');
 
 			return self;
+		},
+
+		setupEventListeners: function(self, div) {
+			// ##### TODO: Event listeners for prompts and choices
+			// ##### TODO: For choices, mark the chosen option as seen.
 		},
 
 		/* A note on how the queue works:
@@ -188,6 +197,13 @@
 			}
 		},
 
+		hasSeenElement: function(self, ident) {
+			if (self.elements.seen[ident] == true) {
+				return true;
+			}
+			return false;
+		},
+
 		elementTypes: {
 			variable: function(self, element) {
 				for (let [key, value] of Object.entries(element.json.update)) {
@@ -212,7 +228,7 @@
 						}
 
 						const operator = value.substring(0,2);
-						const number = Number(value.substring(2));
+						const number = Number(value.substring(2).trim());
 
 						if (operator === '+=') {
 							current += number;
@@ -235,6 +251,7 @@
 					}
 					else {
 						// If the value is a string
+						// ##### TODO: trim unless the value starts and ends with quotes
 						self.variables[key] = value;
 					}
 				}
@@ -253,6 +270,7 @@
 				self.actOnNextElement();
 			},
 			series: function(self, element) {
+				// ##### TODO: this
 				/* Note to future self: In addition to queueing things up, we should also re-pull all
 				   elements of types that have associated elements, to ensure that their associated
 				   elements have been pulled. */
@@ -370,7 +388,8 @@
 					}
 
 					self.div.append(htmlDiv);
-					if (prompt == false) {
+					if (prompt == false || prompt === "0") {
+						// If we're not prompting, go straight to the next element in the queue
 						return self.actOnNextElement();
 					}
 					else if (prompt == true) {
@@ -386,7 +405,39 @@
 					}, {type: 'prompt'});
 
 					self.div.append(promptDiv);
+
+					// ##### TODO: Mark that the element has been seen
 				}, delay);
+			},
+			if: function(self, element) {
+				// ##### TODO: This
+			},
+			choice: function(self, element) {
+				let needed = [];
+				let choices = [];
+				element.json.choices.forEach(function(block, index) {
+					needed.push(block.element);
+					choices.push({
+						data: block,
+						active: false,
+					});
+				});
+
+				// Theoretically we already have the item elements for all of the choices, but just to be safe...
+				let fetch = self.fetchElements(needed);
+
+				let first = true;
+				choices.forEach(function(choice, index) {
+					choice.active = CTE.utils.assessCondition(self, choice.data.cond, choice.data, first);
+					if (choice.active == true) {
+						// After at least one condition is active, none of the rest can be "first"
+						first = false;
+					}
+				});
+
+				fetch.done(function() {
+					// ##### TODO: More here
+				});
 			},
 		},
 
@@ -406,6 +457,17 @@
 				value = CTE.utils.escapeStr(value);
 				return value.replace(/\r?\n\r?/g, '<br>')
 					.replace(/"/g, '&quot;');
+			},
+			convertFromPerlBoolean: function(value) {
+				/* Given a value recieved from a server response that should be boolean, return whether
+				   to interpret it as true or false. The key difference between Perl's in terpretation
+				   of truthiness and JavaScript's interpretation of truthiness is that Perl has a looser
+				   differentiation between strings and numbers and as such the string "0" needs to be
+				   interpreted as false (where as JS would interpret it as true. */
+				if (typeof value === 'string' && value === '0') {
+					return false;
+				}
+				return !!value;
 			},
 			expandHoverTextVariables: function(self, hover) {
 				/* Given a string of text that contains variable names contained within square brackets,
@@ -511,6 +573,211 @@
 				});
 
 				return htmlSpan;
+			},
+			assessCondition: function(self, cond, data, first) {
+				if (typeof cond === 'undefined' || cond === null) {
+					// No condition always means that the condition is met
+					return true;
+				}
+
+				if (Array.isArray(cond)) {
+					// If we're given an array, process each item in it. All items must pass for the condition to be met
+					for (var i = 0; i < cond.length; i++) {
+						let resp = CTE.utils.assessCondition(self, cond[i], data, first);
+						if (resp == false) {
+							// One of them is false, so it's ALL false
+							return false;
+						}
+					}
+					return true;
+				}
+
+				if (typeof cond === 'string') {
+					return CTE.utils.assessConditionString(self, cond, data, first);
+				}
+				else {
+					// If any of the keys in the object return false, then we consider the entire object to be false
+					if ('not' in cond) {
+						let resp = CTE.utils.assessCondition(self, cond['not'], data, first);
+						if (resp == true) {
+							return false;
+						}
+					}
+					if ('and' in cond) {
+						let resp = CTE.utils.assessCondition(self, cond['and'], data, first);
+						if (resp == false) {
+							return false;
+						}
+					}
+					if ('or' in cond) {
+						if (!Array.isArray(cond['or'])) {
+							cond['or'] = [cond['or']];
+						}
+						for (var i = 0; i < cond['or'].length; i++) {
+							let resp = CTE.utils.assessCondition(self, cond['or'][i], data, first);
+							if (resp == true) {
+								// No need to test any more conditions
+								break;
+							}
+						}
+					}
+					if ('xor' in cond) {
+						if (!Array.isArray(cond['xor'])) {
+							cond['xor'] = [cond['xor']];
+						}
+						let checks = 0;
+						for (var i = 0; i < cond['xor'].length; i++) {
+							let resp = CTE.utils.assessCondition(self, cond['xor'][i], data, first);
+							if (resp == true) {
+								checks++;
+							}
+						}
+						if (checks !== 1) {
+							return false;
+						}
+					}
+					if ('xand' in cond) {
+						if (!Array.isArray(cond['xand'])) {
+							cond['xand'] = [cond['xand']];
+						}
+						let checks = 0;
+						for (var i = 0; i < cond['xand'].length; i++) {
+							let resp = CTE.utils.assessCondition(self, cond['xand'][i], data, first);
+							if (resp == true) {
+								checks++;
+							}
+						}
+						if (checks === 0) {
+							return false;
+						}
+						else if (checks === cond['xand'].length) {
+							return false;
+						}
+					}
+				}
+
+				// If we've gotten this far, the condition passed
+				return true;
+			},
+			assessConditionString: function(self, cond, data, first) {
+				// Set aside any quoted strings
+				let quoted = cond.match(/('[^']*'|"[^"]*")/g);
+				cond = cond.replace(/('[^']*'|"[^"]*")/g, "\x00");
+
+				// Split by "or" first, then by "and"
+				let orStrings = cond.split('|');
+				for (var i = 0; i < orStrings.length; i++) {
+					let pass = true;
+					let andStrings = orStrings[i].split('&');
+					for (var j = 0; j < andStrings.length; j++) {
+						if (pass == true) {
+							let inverse = false;
+							if (andStrings[j].substring(0, 1) === '!') {
+								inverse = true;
+								andStrings[j] = andStrings[j].substring(1);
+							}
+
+							if (/^seen\s+:/i.test(andStrings[j])) {
+								let ident = andStrings[j].replace(/^seen\s*:\s*/i, '').replace(/\s*$/, '');
+								if (!self.hasSeenElement(ident)) {
+									pass = false;
+								}
+							}
+							else if (/^function\s*:/i.test(andStrings[j])) {
+								const funcName = andStrings[j].replace(/^function\s*:\s*/i, '').replace(/\s*$/, '');
+								if (self.functions[funcName]) {
+									// Run the function, passing in the data from the condition
+									pass = !!self.functions[funcName]({
+										self: self,
+										condData: data,
+									});
+								}
+							}
+							else if (/^first$/i.test(andStrings[j])) {
+								pass = first;
+							}
+							else {
+								const [operator] = andStrings[j].match(/[!><]=|[=><]/g);
+								let [varName, condValue] = andStrings[j].split(/[!><]=|[=><]/);
+								varName = varName.trim();
+								condValue = condValue.trim();
+
+								// Add back in any quoted strings
+								while (/\x00/.test(condValue)) {
+									let quotedString = quoted.shift();
+									quotedString = quotedString.substring((1, quotedString.length - 1));
+									condValue = condValue.replace("\x00", quotedString);
+								}
+
+								let varValue = self.variables[varName];
+								if (/[<>]/.test(operator)) {
+									// If the operator indicates that it should be a number, make it a number
+									condValue = Number(condValue);
+									varValue = Number(varValue);
+								}
+								else if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(condValue) && /^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(varValue)) {
+									// If both the variable value and the condition value look like numbers, make them numbers
+									condValue = Number(condValue);
+									varValue = Number(varValue);
+								}
+								else {
+									// Otherwise make them both strings
+									condValue = String(condValue);
+									varValue = String(varValue);
+								}
+
+								if (operator === '=') {
+									if (condValue !== varValue) {
+										pass = false;
+									}
+								}
+								else if (operator === '!=') {
+									if (condValue === varValue) {
+										pass = false;
+									}
+								}
+								else if (operator === '>') {
+									if (condValue <= varValue) {
+										pass = false;
+									}
+								}
+								else if (operator === '<') {
+									if (condValue >= varValue) {
+										pass = false;
+									}
+								}
+								else if (operator === '>=') {
+									if (condValue < varValue) {
+										pass = false;
+									}
+								}
+								else if (operator === '<=') {
+									if (condValue > varValue) {
+										pass = false;
+									}
+								}
+							}
+
+							if (inverse == true) {
+								pass = !pass;
+							}
+						}
+						else {
+							// Even if we know that this portion won't pass because one of the other
+							// parts of the "and "condition failed, we still need to discard any
+							// quoted strings.
+							while (/\x00/.test(andStrings[j])) {
+								quoted.shift();
+							}
+						}
+					}
+
+					if (pass == true) {
+						return true;
+					}
+				}
+
+				return false;
 			},
 		},
 	};

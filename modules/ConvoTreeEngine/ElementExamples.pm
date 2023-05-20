@@ -234,19 +234,25 @@ is the potential for choices to be unavialable based on the values of various va
 $examples{choice} = {
 	choices => [
 		{
-			cond    => undef,
-			element => 2,
-			then    => 2,
+			cond          => undef,
+			element       => 2,
+			then          => 2,
+			disp_inactive => JSON::false,
+			arbit         => 'EVEN MORE arbitrary data',
 		},
 	],
+	delay  => 1000,
 	arbit  => {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
-			"2" => 'The "choices" key will contain an array of hashes, containing the following keys',
-			"2.a" => '"cond" is the conditions necessary for the option ot be available. undef indicates that ti is always available. If the key is not present, it is always available',
-			"2.b" => '"element" is the ID or namecat of the element to display for this choice',
-			"2.c" => '"then" is the element or an array of elements that will follow if this option is chosen',
-			"3" => 'These choices will be displayed to the user in the order given',
+			"2" => 'The "delay" key is optional. It indicates how long to wait before displaying the choices',
+			"3" => 'The "choices" key will contain an array of hashes, containing the following keys',
+			"3.a" => '"cond" is the conditions necessary for the option to be available. undef indicates that it is always available. If the key is not present, it is always available',
+			"3.b" => '"element" is the ID or namecat of the element to display for this choice',
+			"3.c" => '"then" is the element or an array of elements that will follow if this option is chosen',
+			"3.d" => '"disp_inactive" is a boolean value indicating whether or not to display the choics if it is not active. Default: false',
+			"3.e" => '"arbit" is a place to store more optional arbitrary data. Can be useful for holding information if the condition calls a function',
+			"4" => 'These choices will be displayed to the user in the order given',
 		},
 	},
 };
@@ -443,27 +449,37 @@ If you need conditions more complicated than what this provides, look into using
 
 Condition blocks are hashrefs that contain one or more of the following keys:
 
+* not
 * and
 * or
 * xor
+* xand
+
+All of these keys can have a value that is either null/undef, a condition string, a condition block,
+or an array where each element is either null/undef, a condition string, or a condition block.
 
 If a condition block contains more than one of the above keys, it only returns true if ALL of them
 return true.
 
+=head3 not
+
+Returns true if the conditions presented did NOT return true.
+
 =head3 and
 
-And blocks can contain a condition string, a condition block, or an array of conditions strings/blocks.
-They return true if all of the conditions within return true.
+Returns true if all of the conditions presented are true.
 
 =head3 or
 
-Or blocks can contain a condition string, a condition block, or an array of conditions strings/blocks.
-They return true if at least one of the conditions within returns true.
+Returns true if at least one of the conditions presented is true.
 
 =head3 xor
 
-Xor blocks can contain a condition string, a condition block, or an array of conditions strings/blocks.
-They return true if only one of the conditions within returns true.
+Returns true if ONLY one of the conditions presented returned true.
+
+=head3 xand
+
+Returns true if AT LEAST ONE BUT NOT ALL of the conditions presented are true.
 
 =cut
 
