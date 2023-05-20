@@ -61,6 +61,7 @@
 				actOnElement: function(id) {return CTE.actOnElement(this, id);},
 				actOnNextElement: function() {return CTE.actOnNextElement(this);},
 				hasSeenElement: function(ident) {return CTE.hasSeenElement(this, ident);},
+				markElementSeen: function(element) {return CTE.markElementSeen(this, element);},
 			};
 			['variables', 'functions'].forEach(function(item, index) {
 				self[item] = settings[item] || {};
@@ -154,29 +155,29 @@
 			return $.Deferred().resolve();
 		},
 
-		// Return the boject containing element data. Return nothing if it's not in our data
-		getElement: function(self, id) {
-			if (self.elements.by_id[id]) {
-				return self.elements.by_id[id];
+		// Return the object containing element data. Return nothing if it's not in our data
+		getElement: function(self, ident) {
+			if (self.elements.by_id[ident]) {
+				return self.elements.by_id[ident];
 			}
-			else if (self.elements.by_namecat[id]) {
-				return self.elements.by_namecat[id];
+			else if (self.elements.by_namecat[ident]) {
+				return self.elements.by_namecat[ident];
 			}
 		},
 
 		// Given our object and an ID or namecat, act on the corresponding element
-		actOnElement: function(self, id) {
+		actOnElement: function(self, ident) {
 			let action;
-			if (!self.elements.by_id[id] && !self.elements.by_namecat[id]) {
+			if (!self.elements.by_id[ident] && !self.elements.by_namecat[ident]) {
 				/* Note that there is the potential here for a situation where we have a request for
 				   an element in flight at the time when we give the command to act on that element.
 				   In that circumstance we'll just request it again - should be no big deal. */
-				action = self.fetchElements(id);
+				action = self.fetchElements(ident);
 			}
 			action ||= $.Deferred().resolve();
 
 			return action.done(function() {
-				const element = self.getElement(id);
+				const element = self.getElement(ident);
 				if (!element) {
 					// ##### TODO: Should we throw some kind of error if the element does exist even after we called for it?
 					return;
@@ -198,10 +199,34 @@
 		},
 
 		hasSeenElement: function(self, ident) {
+			if (typeof ident === 'object') {
+				// If we were passed an element data structure, use the ID from it
+				ident = ident.id;
+			}
 			if (self.elements.seen[ident] == true) {
 				return true;
 			}
 			return false;
+		},
+
+		markElementSeen: function(self, element, unsee) {
+			unsee ??= false;
+			if (typeof element !== 'object') {
+				// If we were passed an ID or a namecat, get the actual element data structure
+				element = self.getElement(element);
+				if (!element) {
+					return;
+				}
+			}
+
+			if (unsee == true) {
+				delete self.elements.seen[element.id];
+				delete self.elements.seen[element.namecat];
+				return;
+			}
+
+			self.elements.seen[element.id] = true;
+			self.elements.seen[element.namecat] = true;
 		},
 
 		elementTypes: {
@@ -405,8 +430,7 @@
 					}, {type: 'prompt'});
 
 					self.div.append(promptDiv);
-
-					// ##### TODO: Mark that the element has been seen
+					self.markElementSeen(element);
 				}, delay);
 			},
 			if: function(self, element) {
@@ -426,8 +450,12 @@
 				// Theoretically we already have the item elements for all of the choices, but just to be safe...
 				let fetch = self.fetchElements(needed);
 
+				let delay = element.json.delay ?? 500;
+				delay = Number(delay);
+
 				let first = true;
 				choices.forEach(function(choice, index) {
+					choice.data.disp_inactive = CTE.utils.convertFromPerlBoolean(choice.data.disp_inactive);
 					choice.active = CTE.utils.assessCondition(self, choice.data.cond, choice.data, first);
 					if (choice.active == true) {
 						// After at least one condition is active, none of the rest can be "first"
@@ -436,7 +464,27 @@
 				});
 
 				fetch.done(function() {
-					// ##### TODO: More here
+					let choicesDiv = $('<div>');
+					if ('classes' in element.json) {
+						choicesDiv.addClass(element.json.classes);
+					}
+
+					choices.forEach(function(choice, index) {
+						choice.element = self.getElement(choice.data.element);
+						if (choice.active == true || choice.data.display_inactive == true) {
+							let choiceDiv = CTE.elementTypes.item(self, choice.element, {type: 'choice', active: choice.active});
+							if (choiceDiv !== null) {
+								// If the user has set a function as part of assessing the choice, it's possible that
+								// they could have it return null (I.E. even though the settings and conditions for
+								// the choice would otherwise have it displayed, they do not want it to be displayed).
+								choicesDiv.append(choiceDiv);
+							}
+						}
+					});
+
+					setTimeout(function() {
+						self.div.append(choicesDiv);
+					}, delay);
 				});
 			},
 		},
@@ -672,9 +720,10 @@
 					for (var j = 0; j < andStrings.length; j++) {
 						if (pass == true) {
 							let inverse = false;
+							andStrings[j] = andStrings[j].trim();
 							if (andStrings[j].substring(0, 1) === '!') {
 								inverse = true;
-								andStrings[j] = andStrings[j].substring(1);
+								andStrings[j] = andStrings[j].replace(/^!\s*/, '');
 							}
 
 							if (/^seen\s+:/i.test(andStrings[j])) {

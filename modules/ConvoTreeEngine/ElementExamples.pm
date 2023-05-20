@@ -241,8 +241,9 @@ $examples{choice} = {
 			arbit         => 'EVEN MORE arbitrary data',
 		},
 	],
-	delay  => 1000,
-	arbit  => {
+	delay   => 1000,
+	classes => 'html classes',
+	arbit   => {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 			"2" => 'The "delay" key is optional. It indicates how long to wait before displaying the choices',

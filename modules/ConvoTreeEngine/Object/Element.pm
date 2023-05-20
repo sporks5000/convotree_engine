@@ -644,6 +644,7 @@ an array of strings indicating validators for what can be present.
 		choice   => {
 			choices => [1, 'arrayOf(1,choice)'],
 			delay   => [0, 'positiveInt'],
+			classes => [0, 'dashWords'],
 			arbit   => [0, 'ignore'],
 		},
 		display  => {
