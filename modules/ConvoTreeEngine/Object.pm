@@ -29,7 +29,7 @@ sub _prep_args {
 
 	for (my $i = 0; $i < @_; $i += 2) {
 		ConvoTreeEngine::Exception::Internal->throw(
-			error => "has keys must be defined",
+			error => "hash keys must be defined",
 		) unless defined $_[$i];
 	}
 

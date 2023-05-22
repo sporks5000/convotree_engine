@@ -285,9 +285,10 @@ sub _confirm_namecat {
 			$args->{$key} //= undef;
 		}
 		if (defined $args->{$key}) {
-			my $isValid = ConvoTreeEngine::Validation->validateValue($args->{$key}, 'dashWords');
+			my $validator = ConvoTreeEngine::Validation->new();
+			my $isValid = $validator->validateValue($args->{$key}, 'dashWords');
 			unless ($isValid) {
-				my $failures = ConvoTreeEngine::Validation->_validation_failures;
+				my $failures = $validator->listFailures;
 				ConvoTreeEngine::Exception::Input->throw(
 					error => "Validation for Element $key did not pass:\n$failures",
 					code  => 400,
