@@ -55,9 +55,10 @@
 					by_id: {},
 					by_namecat: {},
 					seen: {},
+					pulled: {},
 				},
 				getElement: function(id) {return CTE.getElement(this, id);},
-				fetchElements: function(ids, force) {return CTE.fetchElements(this, ids, force);},
+				fetchElements: function(ids) {return CTE.fetchElements(this, ids);},
 				actOnElement: function(id) {return CTE.actOnElement(this, id);},
 				actOnNextElement: function() {return CTE.actOnNextElement(this);},
 				hasSeenElement: function(ident) {return CTE.hasSeenElement(this, ident);},
@@ -108,41 +109,36 @@
 
 		/* Given our object and an ID or array of IDs, query for the ones needed. Ensure that a
 		   resolved jquery deferred object is always returned so that we can act off of it if
-		   necessary.
-
-		   An optional third argument is a boolean value indicating whether or not to skip
-		   assessing and just pull everything requested - this can be useful, as requesting an
-		   ID will also return any associated IDs, so it's possible to have one of the ID in
-		   question without necessarily having all of the thing that might be returned. */
-		fetchElements: function(self, ids, force) {
-			if (typeof force === 'undefined') {
-				force = false;
-			}
-			if (typeof ids === 'undefined' || ids === null) {
+		   necessary. */
+		fetchElements: function(self, idents) {
+			if (typeof idents === 'undefined' || idents === null) {
 				return $.Deferred().resolve();
 			}
 
-			if (!Array.isArray(ids)) {
-				ids = [ids];
+			if (!Array.isArray(idents)) {
+				idents = [idents];
 			}
 
-			let neededIds = [];
-			if (force == true) {
-				neededIds = ids;
-			}
-			else {
-				ids.forEach(function(item, index) {
-					if (!self.elements.by_id[item] && !self.elements.by_namecat[item]) {
-						neededIds.push(item);
-					}
-				});
-			}
+			let needed = []
+			let requested = {};
+			idents.forEach(function(ident, index) {
+				if (!self.elements.pulled[ident]) {
+					needed.push(ident);
+					requested[ident] = true;
+				}
+			});
 
-			if (neededIds.length) {
-				return CTE.call_api(self.api_url, 'element/get', {ids: neededIds}).done(function(data) {
+			if (needed.length) {
+				return CTE.call_api(self.api_url, 'element/get', {ids: needed}).done(function(data) {
 					for (const [key, value] of Object.entries(data.response)) {
 						self.elements.by_id[key] ||= value;
 						self.elements.by_namecat[value.namecat] ||= value;
+						if (requested[key] === true || requested[value.namecat] === true) {
+							// If the item was one that we specifically requested, note it has been specifically
+							// requested so that we won't ever request it again.
+							self.elements.pulled[key] = true;
+							self.elements.pulled[value.namecat] = true;
+						}
 					}
 				});
 			}
@@ -329,16 +325,15 @@
 				// Always go straight into the next element from this element type
 				self.actOnNextElement();
 			},
-			data: function(self, element) {
-				self.fetchElements(element.json.get, true);
+			elements: function(self, element) {
+				if ('queue' in element.json) {
+					self.addToQueue(element.json.queue);
+				}
+				if ('get' in element.json) {
+					self.fetchElements(element.json.get);
+				}
 				// Always go straight into the next element from this element type
 				self.actOnNextElement();
-			},
-			series: function(self, element) {
-				// ##### TODO: this
-				/* Note to future self: In addition to queueing things up, we should also re-pull all
-				   elements of types that have associated elements, to ensure that their associated
-				   elements have been pulled. */
 			},
 			item: function(self, element, additionalArgs) {
 				additionalArgs ||= {};

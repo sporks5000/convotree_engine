@@ -13,8 +13,8 @@ our %examples;
 
 =head2 Item
 
-Items represent a story element, generally consisting of one or more paragraphs that will be displayed
-to the user.
+"Item" elements represent a story element, generally consisting of one or more paragraphs that will be
+displayed to the user.
 
 =cut
 
@@ -98,7 +98,7 @@ $examples{item} = {
 
 =head2 Note
 
-Notes include additional details that will not be displayed to the user. They exist purely for
+"Note" elements include additional details that will not be displayed to the user. They exist purely for
 organizatioal purposes for the creator.
 
 =cut
@@ -110,7 +110,7 @@ $examples{note} = {
 
 =head2 Raw
 
-Raws are blocks that will be interpreted as HTML
+"Raw" elements are blocks that will be interpreted as HTML
 
 =cut
 
@@ -131,7 +131,7 @@ $examples{raw} = {
 
 =head2 Enter and Exit
 
-Enters and exits allow us to display items (or other story elements) within nested blocks.
+"Enter" and "exit" elements allow us to display items (or other story elements) within nested blocks.
 
 =cut
 
@@ -155,7 +155,7 @@ $examples{exit} = {
 
 =head2 If
 
-Ifs represent a place where the story is able to fork in different directions based on variosu conditions
+"If" elements represent a place where the story is able to fork in different directions based on various conditions
 
 =cut
 
@@ -182,7 +182,7 @@ $examples{if} = {
 
 =head2 Stop
 
-Stops indicate that no further queued elements after this point should be displayed. They
+"Stop" elements indicate that no further queued elements after this point should be displayed. They
 are cleared from the queue.
 
 =cut
@@ -198,7 +198,7 @@ $examples{stop} = {
 
 =head2 Variable
 
-variables set or update the value of a variable
+"Variable" elements set or update the value of a variable.
 
 =cut
 
@@ -222,8 +222,8 @@ $examples{variable} = {
 
 =head2 Choice
 
-Choices represent an instance where the user has the ability to make a choice in the narrative. There
-is the potential for choices to be unavialable based on the values of various variables.
+"Choice" elements represent an instance where the user has the ability to make a choice in the narrative.
+There is the potential for choices to be unavialable based on the values of various variables.
 
 =cut
 
@@ -257,7 +257,7 @@ $examples{choice} = {
 
 =head2 Display
 
-Displays will update the CSS of the page.
+"Display" elements will update the CSS of the page.
 
 ##### TODO: Do these replace existing CSS or add to existing CSS?
 
@@ -284,7 +284,7 @@ $examples{display} = {
 
 =head2 Do
 
-Dos indicate that the specified javascript function should be run
+"Do" elements indicate that the specified javascript function should be run.
 
 =cut
 
@@ -307,46 +307,29 @@ $examples{do} = {
 	},
 };
 
-=head2 Data
+=head2 Elements's
 
-Datas indicate that more elements need to be pulled from the server.
+"Elements" elements specify actions to take regarading elements themselves. They can indicate to
+get more elements from the server, or to queue more elements up to be processed next (or both).
 
 =cut
 
-$examples{data} = {
-	get   => [1,2],
+$examples{elements} = {
+	get   => [1, 2, 3],
+	queue => [1, 2],
 	arbit => {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
-			"2" => 'The "get" key must contain either a single positive integer (representing a single element ID) or an array of positive integers',
-		},
-	},
-};
-
-=head2 Series
-
-Serieses are a list of consecutive elements, and potentially a list of other related elements. This
-allows the creator to specify a series of elements that will be acted upon in order, and then
-refrence that series from multiple places rather than need to specify the elements individually each
-time.
-
-=cut
-
-$examples{series} = {
-	series     => [1,2,3,5],
-	additional => [4,6],
-	arbit      => {
-		"Additional details" => {
-			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
-			"2" => 'The "series" key must contain either a single positive integer (representing a single element ID) or an array of positive integers',
-			"3" => 'The "additional" key is optional. It must contain either a single positive integer (representing a single element ID) or an array of positive integers. These elements will not be part of the ordered series, but they will still be returned when the series is requested.',
+			"2" => 'Both the "get" and "queue" keys muust have a value that is a single element identifier (ID or namecat) or an arrayref of element identifiers',
+			"3" => 'Elements specified under the "get" key will be requested from the server (if they have not been already)',
+			"4" => 'Elements specified under the "queue" key will be added to the queue of elements to process next',
 		},
 	},
 };
 
 =head2 Random
 
-Ramdoms indicate an instance where the path of the story can fork at random.
+"Ramdom" elements indicate an instance where the path of the story can fork at random.
 
 =cut
 

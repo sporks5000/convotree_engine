@@ -660,14 +660,10 @@ an array of strings indicating validators for what can be present.
 			stop     => [0, 'boolean'],
 			arbit    => [0, 'ignore'],
 		},
-		data     => {
-			get   => [1, 'elementList'],
+		elements => {
+			get   => [0, 'elementList'],
+			queue => [0, 'elementList'],
 			arbit => [0, 'ignore'],
-		},
-		series   => {
-			series     => [1, 'elementList'],
-			additional => [0, 'elementList'],
-			arbit      => [0, 'ignore'],
 		},
 		random   => {
 			paths    => [1, 'arrayOf(1,randomPath)'],
@@ -896,7 +892,7 @@ sub _confirm_namecat {
 
 sub listReferencedElements {
 	my $self          = shift;
-	my $verify_exists = shift;
+	my $args          = $self->_prep_args(@_);
 
 	my $jsonRef = $self->jsonRef;
 	my $type    = $self->type;
@@ -927,28 +923,19 @@ sub listReferencedElements {
 			push @elements, $choice->{element};
 		}
 	}
-	elsif ($type eq 'data') {
+	elsif ($type eq 'elements') {
 		if (ref $jsonRef->{get}) {
 			push @elements, @{$jsonRef->{get}};
 		}
 		else {
 			push @elements, $jsonRef->{get};
 		}
-	}
-	elsif ($type eq 'series') {
-		if (ref $jsonRef->{series}) {
-			push @elements, @{$jsonRef->{series}};
+
+		if (ref $jsonRef->{queue}) {
+			push @elements, @{$jsonRef->{queue}};
 		}
 		else {
-			push @elements, $jsonRef->{series};
-		}
-		if ($jsonRef->{additional}) {
-			if (ref $jsonRef->{additional}) {
-				push @elements, @{$jsonRef->{additional}};
-			}
-			else {
-				push @elements, $jsonRef->{additional};
-			}
+			push @elements, $jsonRef->{get};
 		}
 	}
 	elsif ($type eq 'random') {
@@ -984,7 +971,7 @@ sub listReferencedElements {
 
 	foreach my $id (keys %element_ids) {
 		push @elements, $id;
-		if ($verify_exists && !$verified{$id}) {
+		if ($args->{verify_exists} && !$verified{$id}) {
 			ConvoTreeEngine::Object::Element->findOrDie({id => $id});
 		}
 	}
@@ -995,9 +982,9 @@ sub listReferencedElements {
 sub doNestedElements {
 	my $self = shift;
 
-	if (my @elements = $self->listReferencedElements(1)) {
+	if (my @elements = $self->listReferencedElements({verify_exists => 1})) {
 		my $type = $self->type;
-		if ($type eq 'if' || $type eq 'choice' || $type eq 'series' || $type eq 'random') {
+		if ($type eq 'if' || $type eq 'choice' || $type eq 'elements' || $type eq 'random') {
 			my $my_id = $self->id;
 			require ConvoTreeEngine::Object::Element::Nested;
 			my $table = ConvoTreeEngine::Object::Element::Nested->_table();
@@ -1071,11 +1058,9 @@ sub sanitizeNesting {
 				}
 			}
 		}
-		elsif ($type eq 'series') {
-			$jsonRef->{series} = $element->_sanitize_nesting_arrays($jsonRef->{series}, $args);
-			if ($jsonRef->{additional}) {
-				$jsonRef->{additional} = $element->_sanitize_nesting_arrays($jsonRef->{additional}, $args);
-			}
+		elsif ($type eq 'elements') {
+			$jsonRef->{queue} = $element->_sanitize_nesting_arrays($jsonRef->{queue}, $args);
+			$jsonRef->{get} = $element->_sanitize_nesting_arrays($jsonRef->{get}, $args);
 		}
 		elsif ($type eq 'random') {
 			foreach my $path (@{$jsonRef->{paths}}) {
