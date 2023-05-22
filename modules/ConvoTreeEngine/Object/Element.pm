@@ -451,11 +451,10 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 	my $conditionBlock = sub {
 		my ($class, $value) = @_;
 		return 0 unless $class->_validate_value($value, 'hashOf', {
-			not  => [0, 'condition'],
-			and  => [0, 'condition'],
-			or   => [0, 'condition'],
-			xor  => [0, 'condition'],
-			xand => [0, 'condition'],
+			not => [0, 'condition'],
+			and => [0, 'condition'],
+			or  => [0, 'condition'],
+			xor => [0, 'condition'],
 		});
 		### Make sure it contains at least one of the above keys
 		return 1 unless scalar keys %$value == 0;

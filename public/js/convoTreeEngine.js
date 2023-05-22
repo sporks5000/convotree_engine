@@ -196,6 +196,11 @@
 		addToQueue: function(self, idents) {
 			/* Given an element identifier or an array of element identifiers, add them to the
 			   queue of elements to be visited. */
+			/* Note: One of the design decisions of this project was giving control to the
+			   creator over when element data is pulled from the backend. While some steps of
+			   that have been added automatically in other places to ensure that there was no
+			   interruption of flow, it was decided that adding additional pieces of it within
+			   the "addToQueue" function was not necessary. */
 			if (typeof idents === 'undefined' || idents === null) {
 				return;
 			}
@@ -203,7 +208,6 @@
 				idents = [idents];
 			}
 
-			// ##### TODO: Do we want to request the elements at this time?
 			if (self.queue.current.length) {
 				// If there are already things in the queue, make a nested list to process through
 				// before returning to the list that's currently present.
@@ -369,7 +373,7 @@
 				if ('id' in element) {
 					// There are some instances where we might pass in a fake element, so make sure
 					// that an ID is actually present.
-					htmlDiv.addClass('convoTreeEngine-element-' . String(element.id));
+					htmlDiv.addClass('convoTreeEngine-element-' + String(element.id));
 				}
 
 				// Apply hover text if applicable
@@ -570,16 +574,27 @@
 				   return a string of HTML*/
 				// In theory we can rely on none of the text being processed in this way
 				// including control characters, so we will be using them as placeholders.
-				text = text.replace(/[\x01-\x04]/g, '') //remove the control characters we're using
+				text = text.replace(/[\x01-\x07]/g, '') //remove the control characters we're using
 					.replace(/\\\\/g, "\x00")         // replace all escaped backslashes
 					.replace(/\\\[/g, "\x01")         // replace all escaped opening square brackets
-					.replace(/\\\]/g, "\x02");        // replace all escaped closing square brackets
+					.replace(/\\\]/g, "\x02")         // replace all escaped closing square brackets
+					.replace(/\\\(/g, "\x03")         // escaped opening parentheses
+					.replace(/\\\)/g, "\x04");        // escaped closing parentheses
 
 				// Separate out the variables; replace them with placeholders.
-				let vars = text.match(/\[[a-zA-Z0-9_.]+\]/g);
-				text = text.replace(/\[[a-zA-Z0-9_.]+\]/g, "\x03")
+				// Use lookahead to ensure we're not matching "](", because that would indicate an html
+				// link.
+				let vars = text.match(/\[[a-zA-Z0-9_.]+\](?!\()/g);
+				text = text.replace(/\[[a-zA-Z0-9_.]+\](?!\()/g, "\x07")
 					.replace(/\x01/g, '[')  // put opening square brackets back (unescaped this time)
 					.replace(/\x02/g, ']'); // put closing square brackets back (unescaped this time)
+
+				// Note that the way we're handling links, if they cannot contain backslashes, square
+				// brackets, or parentheses, those characters must be preceeded by a backslash.
+				let links = text.match(/\[[^\]]+\]\(http[^\s]+\)/g);
+				text = text.replace(/\[([^\]]+)\]\(http[^\s]+\)/g, "\x05$1\x06")
+					.replace(/\x03/g, '(')
+					.replace(/\x04/g, ')');
 
 				// Make sure that we're html safe
 				text = CTE.utils.escapeStr(text);
@@ -603,7 +618,20 @@
 						varName = varName.substring(1, varName.length - 1);
 						let value = self.variables[varName];
 						value = CTE.utils.variableValueToDisplay(value);
-						text = text.replace("\x03", value);
+						text = text.replace("\x07", value);
+					}
+				}
+
+				if (links) {
+					while (links.length) {
+						let link = links.shift()
+							.replace(/\[[^\]]+\]\((http[^\s]+)\)/, "$1")
+							.replace(/\x03/g, '(')
+							.replace(/\x04/g, ')')
+							.replace(/\x01/g, '[')
+							.replace(/\x02/g, ']')
+							.replace(/\x00/g, '\\');
+						text = text.replace(/\x05([^\x06]+)\x06/, '<a href="' + link + '">' + "$1" + '</a>');
 					}
 				}
 
@@ -698,27 +726,12 @@
 							let resp = CTE.utils.assessCondition(self, cond['xor'][i], data, first);
 							if (resp == true) {
 								checks++;
-							}
-						}
-						if (checks !== 1) {
-							return false;
-						}
-					}
-					if ('xand' in cond) {
-						if (!Array.isArray(cond['xand'])) {
-							cond['xand'] = [cond['xand']];
-						}
-						let checks = 0;
-						for (var i = 0; i < cond['xand'].length; i++) {
-							let resp = CTE.utils.assessCondition(self, cond['xand'][i], data, first);
-							if (resp == true) {
-								checks++;
+								if (checks > 1) {
+									return false;
+								}
 							}
 						}
 						if (checks === 0) {
-							return false;
-						}
-						else if (checks === cond['xand'].length) {
 							return false;
 						}
 					}
@@ -780,16 +793,16 @@
 
 								let varValue = self.variables[varName];
 								if (/[<>]|'=='/.test(operator)) {
-									if (!/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(condValue) || !/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(varValue)) {
-										// If the operator indicates that both should be a number, but one of them
-										// clearly is not a number, fail automatically.
-										condValue = true;
-										varValue = false;
-									}
-									else {
-										// If the operator indicates that it should be a number, make it a number
+									// If the operator indicates that both should be a number...
+									if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(condValue) || /^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(varValue)) {
+										// ...and they both look like a number, make sure they're stored as numbers
 										condValue = Number(condValue);
 										varValue = Number(varValue);
+									}
+									else {
+										// If either/both of them don't look like a number, fail automatically
+										condValue = true;
+										varValue = false;
 									}
 								}
 								else if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(condValue) && /^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(varValue)) {

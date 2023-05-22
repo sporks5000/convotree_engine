@@ -392,11 +392,14 @@ The available operators are as follows:
 * <=  - Indicates that the number is lesser than or equal to
 * >   - Indicates that the number is greater than
 * <   - Indicates that the number is lesser than
-* ==  - Indicates numerical equivalence (I.E. If either of the strings contain non-numerical characters,
-       the result will be false).
+* ==  - Indicates numerical equivalence
 * !== - Indicates numerical inequivolence
 
-If this is preceeded by an exclamation point, return true if the condition would otherwise return false.
+...with the numerical-only operators holding to a strict rule of: If either the value of the variable
+or the value it's being compared to do not look like a number, the condition will return false.
+
+If the string as a whole is preceeded by an exclamation point, return true if the condition would
+otherwise return false.
 
 If the value that's being compared to is a that contains spaces or other special characters or is an
 empty string, that string must be placed in single or double quotes. So the following are acceptable:
@@ -454,7 +457,6 @@ Condition blocks are hashrefs that contain one or more of the following keys:
 * and
 * or
 * xor
-* xand
 
 All of these keys can have a value that is either null/undef, a condition string, a condition block,
 or an array where each element is either null/undef, a condition string, or a condition block.
@@ -477,10 +479,6 @@ Returns true if at least one of the conditions presented is true.
 =head3 xor
 
 Returns true if ONLY one of the conditions presented returned true.
-
-=head3 xand
-
-Returns true if AT LEAST ONE BUT NOT ALL of the conditions presented are true.
 
 =cut
 
