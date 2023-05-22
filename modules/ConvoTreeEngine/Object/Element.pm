@@ -415,7 +415,7 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 			}
 			### Each part contains a variable name, an operator, and a condition
 			my $operator = do {
-				$part =~ m/([!><]=|[=><])/;
+				$part =~ m/([!><=]=|[=><]|!==)/;
 				$1;
 			};
 			return 0 unless $operator;
@@ -424,7 +424,7 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 			$varName = substr($varName, 1) if substr($varName, 0, 1) eq '!';
 			return 0 if @other;
 			return 0 unless $class->_validate_value($varName, 'variableName');
-			if ($operator =~ m/[<>]/) {
+			if ($operator =~ m/[<>]|==/) {
 				### If the operator is specific to numbers, make sure that the condition is a number
 				return 0 unless $class->_validate_value($cond, 'number');
 			}
@@ -460,7 +460,7 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 		### Make sure it contains at least one of the above keys
 		return 1 unless scalar keys %$value == 0;
 	};
-	my $singleCondition = sub {
+	my $ifConditionBlock = sub {
 		### the value will be an array
 		my ($class, $value) = @_;
 		return 0 unless $class->_validate_value($value, 'array');
@@ -478,7 +478,7 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 		return 0 unless $class->_validate_value($value, 'hash');
 		foreach my $key (keys %$value) {
 			return 0 unless $class->_validate_value($key, 'variableName');
-			### The strings for updating numerical values could be prased, but if they failed, we'd
+			### The strings for updating numerical values could be parsed, but if they failed, we'd
 			### just check them against "string" anyway, and they'd pass that, so there's no point.
 			return 0 unless $class->_validate_value($value->{$key}, ['string', 'undefined']);
 			return 0 if $value->{$key} =~ m/^[+\*\/-]=/ && !$class->_validate_value(substr($value->{$key}, 2), 'number');
@@ -492,6 +492,7 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 			element       => [1, ['positiveInt', 'namecat']],
 			then          => [0, 'elementList'],
 			disp_inactive => [0, 'boolean'],
+			classes       => [0, 'dashWords'],
 			arbit         => [0, 'ignore'],
 		});
 		### The element MUST be of type "item"
@@ -563,32 +564,32 @@ our $STRICT_ITEM_TYPE_VALIDATION = 1;
 	};
 
 	my %validations = (
-		ignore          => $ignore,
-		undefined       => $undefined,
-		boolean         => $boolean,
-		hash            => $hash,
-		array           => $array,
-		variableName    => '^[a-zA-Z0-9_.]+\z', # A pattern we're specifcally using for variable names
-		words           => '^(?:[a-zA-Z0-9_]+ ?)+\b\z', # A string of words separated by either single spaces
-		dashWords       => '^(?:[a-zA-Z0-9_]+[ -]?)+\b\z', # A string of words separated by either single spaces or single hyphens
-		word            => '^[a-zA-Z0-9_]+\z', # A single word containg letters numbers and/or underscores
-		string          => '^[^\x00-\x09\x0B\x0C\x0E-\x1F\x7F]*$', # No control characters other than "Line Feed" and "Carriage Return"
-		positiveInt     => '^[1-9][0-9]*\z', # Looks like a positive integer
-		number          => '^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z', # Looks like a number
-		namecat         => $namecat,
-		elementList     => $elementList,
-		itemTextNested  => $itemTextNested,
-		itemTextHash    => $itemTextHash,
-		singleElement   => $singleElement,
-		condition       => $condition,
-		conditionString => $conditionString,
-		conditionBlock  => $conditionBlock,
-		singleCondition => $singleCondition,
-		variableUpdates => $variableUpdates,
-		choice          => $choice,
-		randomPath      => $randomPath,
-		arrayOf         => $arrayOf,
-		hashOf          => $hashOf,
+		ignore           => $ignore,
+		undefined        => $undefined,
+		boolean          => $boolean,
+		hash             => $hash,
+		array            => $array,
+		variableName     => '^[a-zA-Z0-9_.]+\z', # A pattern we're specifcally using for variable names
+		words            => '^(?:[a-zA-Z0-9_]+ ?)+\b\z', # A string of words separated by either single spaces
+		dashWords        => '^(?:[a-zA-Z0-9_]+[ -]?)+\b\z', # A string of words separated by either single spaces or single hyphens
+		word             => '^[a-zA-Z0-9_]+\z', # A single word containg letters numbers and/or underscores
+		string           => '^[^\x00-\x09\x0B\x0C\x0E-\x1F\x7F]*$', # No control characters other than "Line Feed" and "Carriage Return"
+		positiveInt      => '^[1-9][0-9]*\z', # Looks like a positive integer
+		number           => '^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z', # Looks like a number
+		namecat          => $namecat,
+		elementList      => $elementList,
+		itemTextNested   => $itemTextNested,
+		itemTextHash     => $itemTextHash,
+		singleElement    => $singleElement,
+		condition        => $condition,
+		conditionString  => $conditionString,
+		conditionBlock   => $conditionBlock,
+		ifConditionBlock => $ifConditionBlock,
+		variableUpdates  => $variableUpdates,
+		choice           => $choice,
+		randomPath       => $randomPath,
+		arrayOf          => $arrayOf,
+		hashOf           => $hashOf,
 	);
 
 =head2 typeValidation
@@ -631,7 +632,7 @@ an array of strings indicating validators for what can be present.
 			arbit => [0, 'ignore'],
 		},
 		if       => {
-			cond  => [1, 'arrayOf(1,singleCondition)'],
+			cond  => [1, 'arrayOf(1,ifConditionBlock)'],
 			arbit => [0, 'ignore'],
 		},
 		stop     => {

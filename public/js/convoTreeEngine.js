@@ -62,6 +62,8 @@
 				actOnNextElement: function() {return CTE.actOnNextElement(this);},
 				hasSeenElement: function(ident) {return CTE.hasSeenElement(this, ident);},
 				markElementSeen: function(element) {return CTE.markElementSeen(this, element);},
+				addToQueue:function(idents) {return CTE.addToQueue(this, idents);},
+				queueLength: function() {return CTE.queueLength(this)},
 			};
 			['variables', 'functions'].forEach(function(item, index) {
 				self[item] = settings[item] || {};
@@ -82,18 +84,11 @@
 			// Determine what IDs we still need to pull, and pull them
 			CTE.fetchElements(self, settings.queue);
 
-			CTE.setupEventListeners(self, div);
-
 			// Updates to our div
 			div.data('cte-name', settings.name);
 			div.addClass('cte-container');
 
 			return self;
-		},
-
-		setupEventListeners: function(self, div) {
-			// ##### TODO: Event listeners for prompts and choices
-			// ##### TODO: For choices, mark the chosen option as seen.
 		},
 
 		/* A note on how the queue works:
@@ -198,7 +193,34 @@
 			}
 		},
 
+		addToQueue: function(self, idents) {
+			/* Given an element identifier or an array of element identifiers, add them to the
+			   queue of elements to be visited. */
+			if (typeof idents === 'undefined' || idents === null) {
+				return;
+			}
+			if (!Array.isArray(idents)) {
+				idents = [idents];
+			}
+
+			// ##### TODO: Do we want to request the elements at this time?
+			if (self.queue.current.length) {
+				// If there are already things in the queue, make a nested list to process through
+				// before returning to the list that's currently present.
+				let queue = self.queue;
+				self.queue = {
+					nested_in: queue,
+					current: idents,
+				};
+				return;
+			}
+
+			self.queue.current = idents;
+		},
+
 		hasSeenElement: function(self, ident) {
+			/* Given an element or an element identiiyer, determine if that element is in the
+			   list of elements seen by the user */
 			if (typeof ident === 'object') {
 				// If we were passed an element data structure, use the ID from it
 				ident = ident.id;
@@ -210,6 +232,9 @@
 		},
 
 		markElementSeen: function(self, element, unsee) {
+			/* Given an element or an element identifier, mark that element as having been seen by
+			   the user. Alternatively, if a third argument of "true" is passed, remove the
+			   indicator that the element has been seen.*/
 			unsee ??= false;
 			if (typeof element !== 'object') {
 				// If we were passed an ID or a namecat, get the actual element data structure
@@ -227,6 +252,18 @@
 
 			self.elements.seen[element.id] = true;
 			self.elements.seen[element.namecat] = true;
+		},
+
+		queueLength: function(self) {
+			/* Return the number of elements currently present before ending the queue */
+			let qLength = self.queue.current.length;
+			let current = self.queue;
+			while(current.nested_in) {
+				current = current.nested_in;
+				length += current.current.length;
+			}
+
+			return qLength;
 		},
 
 		elementTypes: {
@@ -276,7 +313,6 @@
 					}
 					else {
 						// If the value is a string
-						// ##### TODO: trim unless the value starts and ends with quotes
 						self.variables[key] = value;
 					}
 				}
@@ -318,44 +354,22 @@
 					text = {text: text};
 				}
 
-				// Determine what classes we will be using and then apply thme to the div if applicable
-				let frameClass;
+				// Determine what classes we will be using and then apply them to the div if applicable
+				let activeString = additionalArgs.active == true ? 'active' : 'inactive';
+				let frameClass = 'convoTreeEngine-' + additionalArgs.type + '-frame convoTreeEngine-' + activeString + '-frame';
 				let frame = text.frame;
 				if (typeof frame === 'undefined') {
-					if (additionalArgs.active == true) {
-						if (additionalArgs.type === 'choice') {
-							frameClass = 'convoTreeEngine-choice-frame convoTreeEngine-active-frame';
-							frame = self.activeChoiceFrame;
-						}
-						if (additionalArgs.type === 'prompt') {
-							frameClass = 'convoTreeEngine-prompt-frame convoTreeEngine-active-frame';
-							frame = self.activePromptFrame;
-						}
-						else {
-							frameClass = 'convoTreeEngine-item-frame convoTreeEngine-active-frame';
-							frame = self.activeItemFrame;
-						}
-					}
-					else {
-						if (additionalArgs.type === 'choice') {
-							frameClass = 'convoTreeEngine-choice-frame convoTreeEngine-inactive-frame';
-							frame = self.inactiveChoiceFrame;
-						}
-						if (additionalArgs.type === 'prompt') {
-							frameClass = 'convoTreeEngine-prompt-frame convoTreeEngine-inactive-frame';
-							frame = self.inactivePromptFrame;
-						}
-						else {
-							frameClass = 'convoTreeEngine-item-frame convoTreeEngine-inactive-frame';
-							frame = self.inactiveItemFrame;
-						}
-					}
+					const type = additionalArgs.type.charAt(0).toUpperCase() + additionalArgs.type.slice(1);
+					frame = self[activeString + type + 'Frame'];
 				}
 				if (frame && frame.length) {
 					htmlDiv.addClass(frame);
 				}
-				if (frameClass.length) {
-					htmlDiv.addClass(frameClass);
+				htmlDiv.addClass(frameClass);
+				if ('id' in element) {
+					// There are some instances where we might pass in a fake element, so make sure
+					// that an ID is actually present.
+					htmlDiv.addClass('convoTreeEngine-element-' . String(element.id));
 				}
 
 				// Apply hover text if applicable
@@ -412,9 +426,10 @@
 						}
 					}
 
-					self.div.append(htmlDiv);
-					if (prompt == false || prompt === "0") {
-						// If we're not prompting, go straight to the next element in the queue
+					if (prompt == false || prompt === "0" || self.queueLength() === 0) {
+						// If we're not prompting, go straight to the next element in the queue.
+						// If there are no elements in the queue (regardless of whether we would
+						// typically prompt), reach the end.
 						return self.actOnNextElement();
 					}
 					else if (prompt == true) {
@@ -429,12 +444,23 @@
 						},
 					}, {type: 'prompt'});
 
-					self.div.append(promptDiv);
+					htmlDiv.append(promptDiv);
+					CTE.listeners.itemPrompt(self, htmlDiv);
+					self.div.append(htmlDiv);
 					self.markElementSeen(element);
 				}, delay);
 			},
 			if: function(self, element) {
-				// ##### TODO: This
+				let condBlocks = element.json.cond;
+				for (var i = 0; i < condBlocks.length; i++) {
+					const conditionIsMet = CTE.utils.assessCondition(self, condBlocks[i][0], element, true);
+					if (conditionIsMet == true) {
+						self.addToQueue(condBlocks[i][1]);
+						break;
+					}
+				};
+
+				self.actOnNextElement();
 			},
 			choice: function(self, element) {
 				let needed = [];
@@ -455,7 +481,6 @@
 
 				let first = true;
 				choices.forEach(function(choice, index) {
-					choice.data.disp_inactive = CTE.utils.convertFromPerlBoolean(choice.data.disp_inactive);
 					choice.active = CTE.utils.assessCondition(self, choice.data.cond, choice.data, first);
 					if (choice.active == true) {
 						// After at least one condition is active, none of the rest can be "first"
@@ -464,9 +489,12 @@
 				});
 
 				fetch.done(function() {
-					let choicesDiv = $('<div>');
+					let choicesDiv = $('<div>').addClass('convoTreeEngine-choices-group');
 					if ('classes' in element.json) {
 						choicesDiv.addClass(element.json.classes);
+					}
+					if ('classes' in choice.data) {
+						choicesDiv.addClass(choice.data.classes);
 					}
 
 					choices.forEach(function(choice, index) {
@@ -477,12 +505,15 @@
 								// If the user has set a function as part of assessing the choice, it's possible that
 								// they could have it return null (I.E. even though the settings and conditions for
 								// the choice would otherwise have it displayed, they do not want it to be displayed).
+								choicesDiv.data(choice.data);
 								choicesDiv.append(choiceDiv);
 							}
 						}
 					});
 
+					CTE.listeners.choices(self, choicesDiv);
 					setTimeout(function() {
+						CTE.listeners.choices(self, choicesDiv);
 						self.div.append(choicesDiv);
 					}, delay);
 				});
@@ -505,17 +536,6 @@
 				value = CTE.utils.escapeStr(value);
 				return value.replace(/\r?\n\r?/g, '<br>')
 					.replace(/"/g, '&quot;');
-			},
-			convertFromPerlBoolean: function(value) {
-				/* Given a value recieved from a server response that should be boolean, return whether
-				   to interpret it as true or false. The key difference between Perl's in terpretation
-				   of truthiness and JavaScript's interpretation of truthiness is that Perl has a looser
-				   differentiation between strings and numbers and as such the string "0" needs to be
-				   interpreted as false (where as JS would interpret it as true. */
-				if (typeof value === 'string' && value === '0') {
-					return false;
-				}
-				return !!value;
 			},
 			expandHoverTextVariables: function(self, hover) {
 				/* Given a string of text that contains variable names contained within square brackets,
@@ -746,8 +766,8 @@
 								pass = first;
 							}
 							else {
-								const [operator] = andStrings[j].match(/[!><]=|[=><]/g);
-								let [varName, condValue] = andStrings[j].split(/[!><]=|[=><]/);
+								const [operator] = andStrings[j].match(/[!><=]=|[=><]|!==/g);
+								let [varName, condValue] = andStrings[j].split(/[!><=]=|[=><]|!==/);
 								varName = varName.trim();
 								condValue = condValue.trim();
 
@@ -759,10 +779,18 @@
 								}
 
 								let varValue = self.variables[varName];
-								if (/[<>]/.test(operator)) {
-									// If the operator indicates that it should be a number, make it a number
-									condValue = Number(condValue);
-									varValue = Number(varValue);
+								if (/[<>]|'=='/.test(operator)) {
+									if (!/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(condValue) || !/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(varValue)) {
+										// If the operator indicates that both should be a number, but one of them
+										// clearly is not a number, fail automatically.
+										condValue = true;
+										varValue = false;
+									}
+									else {
+										// If the operator indicates that it should be a number, make it a number
+										condValue = Number(condValue);
+										varValue = Number(varValue);
+									}
 								}
 								else if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(condValue) && /^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(varValue)) {
 									// If both the variable value and the condition value look like numbers, make them numbers
@@ -775,12 +803,12 @@
 									varValue = String(varValue);
 								}
 
-								if (operator === '=') {
+								if (operator === '=' || operator === '==') {
 									if (condValue !== varValue) {
 										pass = false;
 									}
 								}
-								else if (operator === '!=') {
+								else if (operator === '!=' || operator === '!==') {
 									if (condValue === varValue) {
 										pass = false;
 									}
@@ -827,6 +855,32 @@
 				}
 
 				return false;
+			},
+		},
+
+		listeners: {
+			itemPrompt: function(self, htmlDiv) {
+				htmlDiv.on('click', '.convoTreeEngine-prompt-frame', function() {
+					// ##### TODO: Will child elements inherit this?
+					$(this).closest('.convoTreeEngine-prompt-frame').remove();
+					self.actOnNextElement();
+				});
+				htmlDiv.find('.convoTreeEngine-prompt-frame').css('cursor','pointer');
+			},
+			choices: function(self, choicesDiv) {
+				choicesDiv.on('click', '.convoTreeEngine-choice-frame', function() {
+					let choice = $(this).closest('.convoTreeEngine-choice-frame');
+					let choiceData = choice.data();
+
+					self.markElementSeen(choiceData.element);
+					self.addToQueue(choiceData.then);
+
+					// Remove all of the choices other than this one
+					choice.closest('.convoTreeEngine-choices-group').find('.convoTreeEngine-choice-frame').not(choice).remove();
+
+					self.actOnNextElement();
+				});
+				choicesDiv.find('.convoTreeEngine-choice-frame').css('cursor','pointer');
 			},
 		},
 	};

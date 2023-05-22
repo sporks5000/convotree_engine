@@ -170,16 +170,12 @@ $examples{if} = {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 			"2" => 'The "cond" key will contain an array of arrays',
-			"3" => 'Each nested array within the "cond" key will contain either one or two strings',
-			"4" => 'The first string will contain one or more sets of a variable name, an operator, and a value',
-			"4.a" => 'Variable names may contain letters, numbers, underscores or periods',
-			"4.b" => 'Operators may be one of the following: "=", "!=", ">", "<", ">=", "<="',
-			"4.c" => 'The value must contain only letters, numbers, and underscores',
-			"4.d" => 'If there are multiple sets within within the first string, they will be separated by and ("&") or or ("|") operators',
-			"5" => 'The second string (if present) will contain either a single positive integer (representing a single element ID) or an array of positive integers',
-			"6" => 'These nested arrays will be processed in order until one of them returns true. At that point, we will follow the path specified by the second value (if any)',
-			"6.a" => 'And further condition arrays will be ignored',
-			"7" => 'If the first element within a nested array is null, it will be interpreted as returning true',
+			"3" => 'Each nested array within the "cond" key will contain either one or two items',
+			"3.a" => 'The first item will be either a condition string, a condition block, an array of condition strings, or undef/null',
+			"3.b" => 'The second item (if present) will either be a single element identifier, or an arrayref of element identifiers',
+			"4" => 'The conditions within these nested array will be processed in the order given.',
+			"4.a" => 'The first condition to return true will determine that path the narrative takes.',
+			"4.b" => 'further conditions beyond the first the passed as true will be ignored.',
 		},
 	},
 };
@@ -238,6 +234,7 @@ $examples{choice} = {
 			element       => 2,
 			then          => 2,
 			disp_inactive => JSON::false,
+			classes       => 'even more classes',
 			arbit         => 'EVEN MORE arbitrary data',
 		},
 	],
@@ -389,12 +386,15 @@ Basic conditions contain a variable, an operator, and a value. For example...
 
 The available operators are as follows:
 
-* =  - Indicaes number or string equivalence
-* != - Indicates number or string inequivolence
-* >= - Indicates that the number is greater than or equal to
-* <= - Indicates that the number is lesser than or equal to
-* >  - Indicates that the number is greater than
-* <  - Indicates that the number is lesser than
+* =   - Indicates number or string equivalence
+* !=  - Indicates number or string inequivolence
+* >=  - Indicates that the number is greater than or equal to
+* <=  - Indicates that the number is lesser than or equal to
+* >   - Indicates that the number is greater than
+* <   - Indicates that the number is lesser than
+* ==  - Indicates numerical equivalence (I.E. If either of the strings contain non-numerical characters,
+       the result will be false).
+* !== - Indicates numerical inequivolence
 
 If this is preceeded by an exclamation point, return true if the condition would otherwise return false.
 
