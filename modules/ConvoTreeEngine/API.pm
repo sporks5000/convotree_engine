@@ -65,24 +65,18 @@ sub api {
 
 		if (!$response && $ConvoTreeEngine::Config::validation_over_api) {
 			if ($uri =~ m@/element/validate/?@i) {
-				eval {
+				my $valid = eval {
 					ConvoTreeEngine::Validation->validateElementJson($body->{json}, $body->{type});
-				};
+				} // 0;
 				##### TODO: I feel like we can expand on what's being returned here
-				if ($@) {
-					return {validated => 0};
-				}
-				return {validated => 1};
+				$response = {validated => $valid};
 			}
 			elsif ($uri =~ m@/validate/?@i) {
-				eval {
+				my $valid = eval {
 					ConvoTreeEngine::Validation->validateValue($body->{value}, $body->{validator}, @{$body->{additional} || []});
-				};
+				} // 0;
 				##### TODO: I feel like we can expand on what's being returned here
-				if ($@) {
-					return {validated => 0};
-				}
-				return {validated => 1};
+				$response = {validated => $valid};
 			}
 		}
 
