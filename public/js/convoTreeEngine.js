@@ -1,6 +1,8 @@
 ;(function () {
 	'use strict';
 
+	// ##### TODO: Figure out a way to queue requests so that we're only maknig one at a time
+
 	var CTE = {
 		instances: {},
 		call_api: function(api_url, endpoint, data) {

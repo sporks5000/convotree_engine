@@ -13,5 +13,6 @@ our $tablePrefix = '';
 our $testTablePrefix = '';
 
 our $modification_over_api = 0;
+our $validation_over_api = 0;
 
 1;

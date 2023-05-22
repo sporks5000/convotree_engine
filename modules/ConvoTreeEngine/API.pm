@@ -7,6 +7,7 @@ use JSON;
 
 use ConvoTreeEngine::Config;
 use ConvoTreeEngine::Exceptions;
+use ConvoTreeEngine::Validation;
 use ConvoTreeEngine::Object::Element;
 
 =head2 api
@@ -36,7 +37,8 @@ sub api {
 			my $elements = ConvoTreeEngine::Object::Element->searchWithNested_hashRefs($ids);
 			$response = $elements;
 		}
-		elsif ($ConvoTreeEngine::Config::modification_over_api) {
+
+		if (!$response && $ConvoTreeEngine::Config::modification_over_api) {
 			if ($uri =~ m@/element/create/?@i) {
 				my $element = ConvoTreeEngine::Object::Element->create($body);
 				$response = $element->asHashRef;
@@ -58,6 +60,29 @@ sub api {
 				my $element = ConvoTreeEngine::Object::Element->findOrDie(\%searchArgs);
 				$element->delete;
 				$response = {deleted => 1};
+			}
+		}
+
+		if (!$response && $ConvoTreeEngine::Config::validation_over_api) {
+			if ($uri =~ m@/element/validate/?@i) {
+				eval {
+					ConvoTreeEngine::Validation->validateElementJson($body->{json}, $body->{type});
+				};
+				##### TODO: I feel like we can expand on what's being returned here
+				if ($@) {
+					return {validated => 0};
+				}
+				return {validated => 1};
+			}
+			elsif ($uri =~ m@/validate/?@i) {
+				eval {
+					ConvoTreeEngine::Validation->validateValue($body->{value}, $body->{validator}, @{$body->{additional} || []});
+				};
+				##### TODO: I feel like we can expand on what's being returned here
+				if ($@) {
+					return {validated => 0};
+				}
+				return {validated => 1};
 			}
 		}
 

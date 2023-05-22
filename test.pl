@@ -17,6 +17,7 @@ use Data::Dumper;
 
 use ConvoTreeEngine::Exceptions;
 use ConvoTreeEngine::Mysql;
+use ConvoTreeEngine::Validation;
 use ConvoTreeEngine::Object::Element;
 use ConvoTreeEngine::Object::Element::Nested;
 
@@ -44,7 +45,7 @@ my $rows = ConvoTreeEngine::Mysql->fetchRows(qq/SELECT * FROM ${prefix}c_element
 foreach my $row (sort {$a->{type} cmp $b->{type}} @$rows) {
 	eval {
 		### Turn off item type validation
-		local $ConvoTreeEngine::Object::Element::STRICT_ITEM_TYPE_VALIDATION = 0;
+		local $ConvoTreeEngine::Validation::STRICT_ITEM_TYPE_VALIDATION = 0;
 		ConvoTreeEngine::Object::Element->create({
 			type     => $row->{type},
 			json     => $row->{example},
