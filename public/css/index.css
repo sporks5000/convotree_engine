@@ -4,6 +4,7 @@
 	border-style: solid;
 	border-radius: 4px;
 	padding: 4px;
+	margin-bottom: 6px;
 }
 .convoTreeEngine-prompt-frame,
 .convoTreeEngine-choice-frame .convoTreeEngine-active-frame{

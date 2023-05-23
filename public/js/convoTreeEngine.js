@@ -45,6 +45,8 @@
 				// ##### TODO: Present an error of some kind
 			}
 
+			// ##### TODO: Make sure that the name is present and acceptable to be part of a class name
+
 			var div = $(settings.div);
 
 			// Put our stylesheet in place
@@ -104,7 +106,7 @@
 
 			// Updates to our div
 			div.data('convoTreeEngine-name', settings.name);
-			div.addClass('convoTreeEngine-container');
+			div.addClass('convoTreeEngine-container convoTreeEngine-container-' + settings.name);
 
 			return self;
 		},
@@ -948,8 +950,27 @@
 				return false;
 			},
 			rebuildCss: function(self) {
-				// ##### TODO: build the CSS text
-				self.style.sheet.replaceSync("a { color: red; }"); // ##### TODO: Replace this text with the built text
+				let styleText = [];
+
+				for (let [key, value] of Object.entries(self.style.mine)) {
+					let cssKeys = key.split(',');
+					for (var i = 0; i < cssKeys.length; i++) {
+						cssKeys[i].trim();
+						cssKeys[i] = 'div.convoTreeEngine-container-' + self.name + ' ' + cssKeys[i];
+					}
+					key = cssKeys.join(', ');
+					styleText.push(key + ' { ' + value + ' }');
+				}
+
+				for (let [key, value] of Object.entries(self.style.all)) {
+					styleText.push(key + ' { ' + value + ' }');
+				}
+
+				styleText = styleText.join("/n");
+
+				self.style.sheet.replaceSync(styleText);
+
+				return styleText;
 			},
 		},
 
