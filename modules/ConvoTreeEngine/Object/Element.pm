@@ -197,6 +197,7 @@ sub searchWithNested {
 	my $namecat_string;
 	my @namecat_bits;
 	foreach my $id (@ids) {
+		next unless defined $id;
 		if ($id =~ m/^[0-9]+\z/) {
 			$id_string .= '?,';
 			push @id_bits, $id;
@@ -208,6 +209,11 @@ sub searchWithNested {
 	}
 	$id_string = substr($id_string, 0, -1) if $id_string;
 	$namecat_string = substr($namecat_string, 0, -1) if $namecat_string;
+
+	if (!$id_string && !$namecat_string) {
+		return if wantarray;
+		return {};
+	}
 
 	require ConvoTreeEngine::Object::Element::Nested;
 	my $e_table  = $invocant->_table;
@@ -276,6 +282,22 @@ sub searchWithNested_hashRefs {
 sub _confirm_namecat {
 	my $invocant = shift;
 	my $args     = shift;
+
+	if ($args->{namecat}) {
+		my ($name, $cat) = split m/:/, $args->{namecat};
+		if (defined $name && defined $cat) {
+			if ((defined $args->{name} && $name ne $args->{name}) || (defined $args->{category} && $cat ne $args->{category})) {
+				require Data::Dumper;
+				ConvoTreeEngine::Exception::Input->throw(
+					error => "Conflict between argument 'namecat' and 'name' or 'category': " . Data::Dumper::Dumper($args),
+					code  => 400,
+				);
+			}
+
+			$args->{name}     //= $name;
+			$args->{category} //= $cat;
+		}
+	}
 
 	foreach my $key (qw/name category/) {
 		if (ref $invocant) {

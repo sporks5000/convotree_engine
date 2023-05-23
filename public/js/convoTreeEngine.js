@@ -124,6 +124,10 @@
 			let needed = []
 			let requested = {};
 			idents.forEach(function(ident, index) {
+				if (typeof ident === 'undefined' || ident === null) {
+					// If this is happening, we probably need to figure out why
+					return;
+				}
 				if (!self.elements.pulled[ident]) {
 					needed.push(ident);
 					requested[ident] = true;
@@ -142,6 +146,12 @@
 							self.elements.pulled[value.namecat] = true;
 						}
 					}
+
+					Object.keys(requested).forEach(function(key) {
+						if (self.elements.pulled[key] !== true) {
+							console.log('Requested element "' + key + '" but it was not returned');
+						}
+					});
 				});
 			}
 
@@ -431,6 +441,8 @@
 						// If we're not prompting, go straight to the next element in the queue.
 						// If there are no elements in the queue (regardless of whether we would
 						// typically prompt), reach the end.
+						self.div.append(htmlDiv);
+						self.markElementSeen(element);
 						return self.actOnNextElement();
 					}
 					else if (prompt == true) {
@@ -494,12 +506,17 @@
 					if ('classes' in element.json) {
 						choicesDiv.addClass(element.json.classes);
 					}
-					if ('classes' in choice.data) {
-						choicesDiv.addClass(choice.data.classes);
-					}
 
 					choices.forEach(function(choice, index) {
+						if ('classes' in choice.data) {
+							choicesDiv.addClass(choice.data.classes);
+						}
+
 						choice.element = self.getElement(choice.data.element);
+						if (!choice.element) {
+							// We've requested the elements that were listed. If it's not here now, then there's something wrong.
+							return;
+						}
 						if (choice.active == true || choice.data.display_inactive == true) {
 							let choiceDiv = CTE.elementTypes.item(self, choice.element, {type: 'choice', active: choice.active});
 							if (choiceDiv !== null) {
