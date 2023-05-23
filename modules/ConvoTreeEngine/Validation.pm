@@ -94,7 +94,6 @@ NOT validate as a namecat.
 =cut
 
 my $namecat = sub {
-
 	my ($self, $value) = @_;
 	return 0 if $self->validateRegex($value, ':', 1);
 	my ($cat, $name, @other) = split m/:/, $value;
@@ -234,7 +233,7 @@ my $conditionString = sub {
 		}
 
 		### Each part contains a variable name, an operator, and a condition
-		my ($operator) = $part =~ m/[!><=]=|[=><]|!==/g;
+		my ($operator) = $part =~ m/!==|[!><=]=|[=><]/g;
 		return $self->fail('Condition string does not have an operator', $part) unless $operator;
 		my ($varName, $cond) = split m/$operator/, $part;
 		$varName =~ s/^\s+|\s+$//g;
@@ -243,6 +242,7 @@ my $conditionString = sub {
 		### If it starts with an exclamation point, strip that out
 		$varName = substr($varName, 1) if substr($varName, 0, 1) eq '!';
 		return 0 unless $self->validateValue($varName, 'variableName');
+		return 0 unless $self->validateValue($cond, 'string');
 		if ($operator =~ m/[<>]|==/) {
 			### If the operator is specific to numbers, make sure that the condition is a number
 			return 0 unless $self->validateValue($cond, 'number');
@@ -255,7 +255,6 @@ my $conditionString = sub {
 			}
 			else {
 				### Otherwise make sure that it has no spaces or special characters
-				return 0 if $cond =~ m/\s/;
 				return 0 unless $self->validateValue($cond, 'word');
 			}
 		}
@@ -610,7 +609,7 @@ sub validateValue {
 	my $self = ref $invocant ? $invocant : $invocant->new();
 
 	if ($self->nested == 0) {
-		$self->resetFailures;
+		$self->reset;
 	}
 	$self->nested(1);
 
@@ -710,14 +709,17 @@ sub nested {
 
 	return $self->{nested};
 }
+
+sub reset {
+	my $self = shift;
+	$self->{failures} = [];
+	$self->{details} &&= [];
+	return;
+}
+
 sub failures {
 	my $self = shift;
 	return $self->{failures} ||= [];
-}
-sub resetFailures {
-	my $self = shift;
-	$self->{failures} = [];
-	return;
 }
 sub addFailure {
 	my $self    = shift;

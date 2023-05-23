@@ -79,3 +79,57 @@ $elements = ConvoTreeEngine::Object::Element->searchWithNested(\@ids);
 $elements = ConvoTreeEngine::Object::Element->searchWithNested('type tests:test series');
 
 ##### TODO: Need to test update functionality here
+
+my $validator = ConvoTreeEngine::Validation->new;
+### Note: Not testing if these would be true, just if they pass validation
+my @condition_string_tests = (
+	'var=1',
+	'var = 1',
+	'var= 1',
+	'var =1',
+	'!var = 1',
+	'taco=1&burrito=1',
+	'taco=1|burrito=1',
+	'taco = 1 | burrito=1',
+	'taco=1 & burrito=1',
+	'var=1&var=2|var=3',
+	'var ==1',
+	'var>1',
+	'var<1',
+	'var<=1',
+	'var>=1',
+	'var!== 1',
+	'taco=1|!burrito=1',
+	'taco="tingly tim"',
+	"var = 'Pasta time!'",
+	q/var ="It'sa me, Mario!"/,
+	' var = 1 ',
+	'seen:13',
+	'!seen:13',
+	'seen:taco:burrito',
+	'seen : taco:burrito',
+);
+
+foreach my $cs (@condition_string_tests) {
+	$validator->validateValue($cs, 'conditionString') || die "q/$cs/ did not pass as a condition string";
+}
+
+### Test that these fail validation
+@condition_string_tests = (
+	'var==taco',
+	'var!==taco',
+	'var>=taco',
+	'var<=taco',
+	'var>taco',
+	'var<taco',
+	'var=1 && var=2',
+	'var',
+	'var=1 || var=2',
+	'var=1|var|var=2',
+	'seen : taco:burrito:taco',
+	'var=my face',
+);
+
+foreach my $cs (@condition_string_tests) {
+	$validator->validateValue($cs, 'conditionString') && die "q/$cs/ did pass as a condition string (and should not have)";
+}

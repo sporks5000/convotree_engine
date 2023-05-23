@@ -756,7 +756,7 @@
 								andStrings[j] = andStrings[j].replace(/^!\s*/, '');
 							}
 
-							if (/^seen\s+:/i.test(andStrings[j])) {
+							if (/^seen\s*:/i.test(andStrings[j])) {
 								let ident = andStrings[j].replace(/^seen\s*:\s*/i, '').replace(/\s*$/, '');
 								if (!self.hasSeenElement(ident)) {
 									pass = false;
@@ -776,8 +776,8 @@
 								pass = first;
 							}
 							else {
-								const [operator] = andStrings[j].match(/[!><=]=|[=><]|!==/g);
-								let [varName, condValue] = andStrings[j].split(/[!><=]=|[=><]|!==/);
+								const [operator] = andStrings[j].match(/!==|[!><=]=|[=><]/g);
+								let [varName, condValue] = andStrings[j].split(/!==|[!><=]=|[=><]/);
 								varName = varName.trim();
 								condValue = condValue.trim();
 
