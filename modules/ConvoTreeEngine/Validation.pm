@@ -119,6 +119,17 @@ my $elementList = sub {
 	return 0 unless $self->validateValue($value, ['positiveInt', 'namecat', 'arrayOf(positiveInt,namecat)']);
 	return 1;
 };
+
+=head2 itemTextNested
+
+Nested item text is an array of two or three elements. The first array element, if defined,
+will be a string of classes to apply to an HTML span. The second, if defined, is the text
+for that span - either as a string, or as an array of itemTextNested arrays. If the second
+is defined, there will not be a third array element; otherwise the third element will be a
+variable name, the value of which will be populated as the text of the span.
+
+=cut
+
 my $itemTextNested = sub {
 	my ($self, $value) = @_;
 	return 0 unless $self->validateValue($value, 'array');
@@ -137,6 +148,13 @@ my $itemTextNested = sub {
 	}
 	return 1;
 };
+
+=head2 itemTextHash
+
+A hash of information for producing item text.
+
+=cut
+
 my $itemTextHash = sub {
 	my ($self, $value) = @_;
 	return $self->validateValue($value, 'hashOf', {
@@ -146,7 +164,14 @@ my $itemTextHash = sub {
 		hover   => [0, 'string'],
 		frame   => [0, 'dashWords']
 	});
-},
+};
+
+=head2 singleElement
+
+Given the JSON value for an element and it's type, validate that it matches what's expected.
+
+=cut
+
 my $singleElement = sub {
 	### Return true if the value has the structure of a single element
 	my ($self, $value, $type) = @_;
@@ -162,61 +187,59 @@ my $conditionString = sub {
 	### A string of text
 	my ($self, $value) = @_;
 	return $self->pass('An undefined value passes validation for type "conditionString"') if !defined $value;
-	return $self->fail('Validation  type "conditionString" cannot be a reference', $value) if ref $value;
-	return $self->fail('Validation  type "conditionString" cannot be an empty string', $value) if !length $value;
+	return $self->fail('Validation type "conditionString" cannot be a reference', $value) if ref $value;
+	return $self->fail('Validation type "conditionString" cannot be an empty string', $value) if !length $value;
+
 	### Set aside quoted strings that might contain special characters
-	my @quoted;
-	my $valueMod = '';
-	while ($value =~ m/^(.*)('[^']*'|"[^"]*")(.*)$/) {
-		$valueMod .= "$1'''";
-		$value = $3 // '';
-		push @quoted, $2;
-	}
+	my @quoted = $value =~ m/'[^']*'|"[^"]*"/g;
+	my $valueMod = $value =~ s/'[^']*'|"[^"]*"/\x00/gr;
+
 	### If there's an extra quote at the end, the string we were passed was malformed
-	return $self->fail('String has an unmatched quotation mark', $value) if $value =~ m/['"]/;
-	$valueMod .= $value;
-	my @parts = split m/\s*[&|]\s*/, $valueMod;
+	return $self->fail('String has an unmatched quotation mark', $value) if $valueMod =~ m/['"]/;
+
+	my @parts = split m/[&|]/, $valueMod;
 	foreach my $part (@parts) {
+		$part =~ s/^\s+|\s+$//g;
 		### Put the quoted bits back
-		my $quoted_count = $part =~ m/'''/g;
-		if ($quoted_count) {
-			my @pieces = split m/'''/, $part;
-			if (@pieces == $quoted_count) {
+		my @quoted_count = $part =~ m/\x00/g;
+		if (@quoted_count) {
+			my @pieces = split m/\x00/, $part;
+			if ($part =~ m/\x00$/) {
 				push @pieces, '';
-			}
-			if ($part =~ m/^'''/) {
-				unshift @pieces, '';
 			}
 			$part = shift @pieces;
 			while (@pieces) {
 				$part .= shift(@quoted) . shift(@pieces);
 			}
 		}
-		if ($part =~ m/^!?seen:(.*)$/i) {
+
+		if ($part =~ m/^!?seen\s*:(.*)$/i) {
 			### A part can also be the string "seen:" followed by an identifier for an element (indicating that that element has already been seen by the user)
 			### If it's preceeded by an exclamation point, that means that it hasn't been seen
 			my $seen = $1;
+			$seen =~ s/^\s+|\s+$//g;
 			return $self->fail('A "seen" condition must be followed by a valid element identifier', $part) unless $self->validateValue($seen, ['positiveInt', 'namecat']);
 			next;
 		}
-		elsif ($part =~ m/^!?function:(.*)$/i) {
+		elsif ($part =~ m/^!?function\s*:(.*)$/i) {
 			### A part can indicate the name of a javascript function that will return a true or false value
 			my $func = $1;
+			$func =~ s/^\s+|\s+$//g;
 			return 0 unless $self->validateValue($func, 'word');
 			next;
 		}
-		elsif ($part =~ m/^!?first\z/i) {
+		elsif ($part =~ m/^!?first$/i) {
 			### A part can be the word "first" indicating that no options previous to this one have returned true
 			next;
 		}
+
 		### Each part contains a variable name, an operator, and a condition
-		my $operator = do {
-			$part =~ m/([!><=]=|[=><]|!==)/;
-			$1;
-		};
+		my ($operator) = $part =~ m/[!><=]=|[=><]|!==/g;
 		return $self->fail('Condition string does not have an operator', $part) unless $operator;
-		my ($varName, $cond, @other) = split m/\s*$operator\s*/, $part;
-		return $self->fail('Condition string has too many operators', $part) if @other;
+		my ($varName, $cond) = split m/$operator/, $part;
+		$varName =~ s/^\s+|\s+$//g;
+		$cond =~ s/^\s+|\s+$//g;
+
 		### If it starts with an exclamation point, strip that out
 		$varName = substr($varName, 1) if substr($varName, 0, 1) eq '!';
 		return 0 unless $self->validateValue($varName, 'variableName');
@@ -265,7 +288,7 @@ my $ifConditionBlock = sub {
 	return $self->fail('If condition blocks should be an array of one or two elements', $value) if @$value > 2;
 	return $self->pass('Valid condition block with one element', $value) unless @$value == 2;
 	### If the second element is present, it should be an element ID or an array of element IDs
-	return 0 unless $self->validateValue($value->[1], 'elementList');
+	return 0 unless $self->validateValue($value->[1], ['undefined', 'elementList']);
 	return $self->pass('Valid condition block with two elements', $value);
 };
 my $variableUpdates = sub {
@@ -740,6 +763,25 @@ sub pass {
 	}
 
 	return 1;
+}
+
+sub info {
+	my $self = shift;
+
+	if ($self->details) {
+		my $message = shift;
+		my $value   = shift;
+
+		my $detail = 'Info: ' . $message . '.';
+		if (defined $value) {
+			my $displayValue = ref $value ? JSON::encode_json($value) : $value;
+			$detail .= " Value: $displayValue";
+		}
+
+		$self->addDetail($detail);
+	}
+
+	return;
 }
 
 sub listFailures {

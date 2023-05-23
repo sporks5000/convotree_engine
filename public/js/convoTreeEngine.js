@@ -351,7 +351,7 @@
 				// Create the div that will contain the item text
 				let htmlDiv = $('<div>');
 
-				if (typeof text === 'string') {
+				if (typeof text === 'string' || Array.isArray(text)) {
 					text = {text: text};
 				}
 
@@ -529,9 +529,9 @@
 					.replace(/>/g, '&gt;');
 			},
 			variableValueToDisplay: function(value) {
-				/* Given the value of a variable, prepare it to be displayed as part of a item. Make
-				   sure it's defined, make sure it's a string, make sure it's escaped appropriately,
-				   etc. */
+				/* Given the value of a variable, (Or other text that we want to apply minimal parsing
+				   to) prepare it to be displayed as part of a item. Make sure it's defined, make sure
+				   it's a string, make sure it's escaped appropriately, etc. */
 				value ??= '[UNDEFINED]';
 				value = String(value);
 				value = CTE.utils.escapeStr(value);

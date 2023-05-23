@@ -65,18 +65,26 @@ sub api {
 
 		if (!$response && $ConvoTreeEngine::Config::validation_over_api) {
 			if ($uri =~ m@/element/validate/?@i) {
+				my %validationArgs = (details => $body->{details});
+				my $validator = ConvoTreeEngine::Validation->new(\%validationArgs);
 				my $valid = eval {
-					ConvoTreeEngine::Validation->validateElementJson($body->{json}, $body->{type});
+					$validator->validateElementJson($body->{json}, $body->{type});
 				} // 0;
-				##### TODO: I feel like we can expand on what's being returned here
-				$response = {validated => $valid};
+
+				my %resp = (validated => $valid);
+				$resp{details} = $validator->details if $body->{details};
+				$response = \%resp;
 			}
 			elsif ($uri =~ m@/validate/?@i) {
+				my %validationArgs = (details => $body->{details});
+				my $validator = ConvoTreeEngine::Validation->new(\%validationArgs);
 				my $valid = eval {
-					ConvoTreeEngine::Validation->validateValue($body->{value}, $body->{validator}, @{$body->{additional} || []});
+					$validator->validateValue($body->{value}, $body->{validator}, @{$body->{additional} || []});
 				} // 0;
-				##### TODO: I feel like we can expand on what's being returned here
-				$response = {validated => $valid};
+	
+				my %resp = (validated => $valid);
+				$resp{details} = $validator->details if $body->{details};
+				$response = \%resp;
 			}
 		}
 
