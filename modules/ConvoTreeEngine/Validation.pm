@@ -395,6 +395,7 @@ my %validations = (
 	word             => '^[a-zA-Z0-9_]+\z', # A single word containg letters numbers and/or underscores
 	string           => '^[^\x00-\x09\x0B\x0C\x0E-\x1F\x7F]*$', # No control characters other than "Line Feed" and "Carriage Return"
 	positiveInt      => '^[1-9][0-9]*\z', # Looks like a positive integer
+	nonNegInt        => '^[0-9]+\z', # Looks like a non-negative integer
 	number           => '^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z', # Looks like a number
 	namecat          => $namecat,
 	elementList      => $elementList,
@@ -425,7 +426,7 @@ an array of strings indicating validators for what can be present.
 		text     => [1, ['string', 'arrayOf(1,itemTextNested)', 'itemTextHash']],
 		textx    => [0, ['string', 'arrayOf(1,itemTextNested)', 'itemTextHash']],
 		function => [0, 'word'],
-		delay    => [0, 'positiveInt'],
+		delay    => [0, 'nonNegInt'],
 		prompt   => [0, ['boolean', 'string', 'arrayOf(1,itemTextNested)', 'itemTextHash']],
 		arbit    => [0, 'ignore'],
 	},
@@ -435,7 +436,7 @@ an array of strings indicating validators for what can be present.
 	},
 	raw      => {
 		html   => [1, 'string'],
-		delay  => [0, 'positiveInt'],
+		delay  => [0, 'nonNegInt'],
 		prompt => [0, 'boolean'],
 		stop   => [0, 'boolean'],
 		arbit  => [0, 'ignore'],
@@ -464,26 +465,29 @@ an array of strings indicating validators for what can be present.
 	},
 	choice   => {
 		choices => [1, 'arrayOf(1,choice)'],
-		delay   => [0, 'positiveInt'],
+		delay   => [0, 'nonNegInt'],
 		classes => [0, 'dashWords'],
 		arbit   => [0, 'ignore'],
 	},
 	display  => {
-		disp  => [1, 'hash'],
-		delay => [0, 'positiveInt'],
-		stop  => [0, 'boolean'],
-		arbit => [0, 'ignore'],
+		mine      => [0, 'hash'],
+		all       => [0, 'hash'],
+		wipe_mine => [0, 'boolean'],
+		wipe_all  => [0, 'boolean'],
+		delay     => [0, 'nonNegInt'],
+		arbit     => [0, 'ignore'],
 	},
 	do       => {
 		function => [1, 'word'],
 		args     => [0, 'array'],
-		delay    => [0, 'positiveInt'],
+		delay    => [0, 'nonNegInt'],
 		stop     => [0, 'boolean'],
 		arbit    => [0, 'ignore'],
 	},
 	elements => {
 		get   => [0, 'elementList'],
 		queue => [0, 'elementList'],
+		drop  => [0, 'boolean'],
 		arbit => [0, 'ignore'],
 	},
 	random   => {

@@ -264,20 +264,28 @@ $examples{choice} = {
 =cut
 
 $examples{display} = {
-	disp  => {
+	mine      => {
 		'css selector' => {
 			'text-align'       => 'left',
 			'background-color' => '#000000',
 		},
 	},
-	delay => '1000',
-	stop  => JSON::false,
-	arbit => {
+	all       =>{
+		'css selector' => {
+			'text-align'       => 'left',
+			'background-color' => '#000000',
+		},
+	},
+	wipe_mine => JSON::false,
+	wipe_all  => JSON::false,
+	delay     => '1000',
+	arbit     => {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 			"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
-			"3" => 'The "stop" key is optional. It contains a boolean value indicating whether or not the flow of elements sshould stop after this point (identical to a "stop" block)',
-			"4" => 'The "dsip" key is a hashref of css selectors to the CSS that will apply to them',
+			"3" => 'The "mine" key is a hashref of css selectors to the CSS that will apply to them, and only within the convoTreeEngine div',
+			"4" => 'The "all" key is a hashref of css selectors to the CSS that will apply to them, regardless of where they are present in the page',
+			"5" => 'The "wipe_mine" and "wipe_all" keys, if present and true, indicate that all of the styles currently set should be removed before adding new ones',
 		},
 	},
 };
@@ -317,12 +325,14 @@ get more elements from the server, or to queue more elements up to be processed 
 $examples{elements} = {
 	get   => [1, 2, 3],
 	queue => [1, 2],
+	drop  => JSON::false,
 	arbit => {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 			"2" => 'Both the "get" and "queue" keys muust have a value that is a single element identifier (ID or namecat) or an arrayref of element identifiers',
 			"3" => 'Elements specified under the "get" key will be requested from the server (if they have not been already)',
 			"4" => 'Elements specified under the "queue" key will be added to the queue of elements to process next',
+			"5" => 'If the "drop" key is true, drop all existing items from the queue',
 		},
 	},
 };

@@ -41,7 +41,16 @@
 
 		*/
 		convoLaunch: function(settings) {
+			if (CTE.instances[settings.name]) {
+				// ##### TODO: Present an error of some kind
+			}
+
 			var div = $(settings.div);
+
+			// Put our stylesheet in place
+			const ss = new CSSStyleSheet;
+			document.adoptedStyleSheets.unshift(ss);
+
 			if (settings.queue && !Array.isArray(settings.queue)) {
 				settings.queue = [settings.queue];
 			}
@@ -59,6 +68,11 @@
 					seen: {},
 					pulled: {},
 				},
+				style: {
+					sheet: ss,
+					mine: {},
+					all: {},
+				},
 				getElement: function(id) {return CTE.getElement(this, id);},
 				fetchElements: function(ids) {return CTE.fetchElements(this, ids);},
 				actOnElement: function(id) {return CTE.actOnElement(this, id);},
@@ -66,6 +80,7 @@
 				hasSeenElement: function(ident) {return CTE.hasSeenElement(this, ident);},
 				markElementSeen: function(element) {return CTE.markElementSeen(this, element);},
 				addToQueue:function(idents) {return CTE.addToQueue(this, idents);},
+				dropQueue:function(idents) {return CTE.dropQueue(this);},
 				queueLength: function() {return CTE.queueLength(this)},
 			};
 			['variables', 'functions'].forEach(function(item, index) {
@@ -230,6 +245,14 @@
 			self.queue.current = idents;
 		},
 
+		dropQueue: function(self) {
+			self.queue = {
+				nested_in: null,
+				current: [],
+			};
+			return;
+		},
+
 		hasSeenElement: function(self, ident) {
 			/* Given an element or an element identiiyer, determine if that element is in the
 			   list of elements seen by the user */
@@ -338,6 +361,9 @@
 				self.actOnNextElement();
 			},
 			elements: function(self, element) {
+				if (element.json.drop == true) {
+					self.dropQueue();
+				}
 				if ('queue' in element.json) {
 					self.addToQueue(element.json.queue);
 				}
@@ -535,6 +561,44 @@
 						self.div.append(choicesDiv);
 					}, delay);
 				});
+			},
+			display: function(self, element) {
+				let delay = element.json.delay ?? 500;
+				delay = Number(delay);
+
+				if ('wipe_mine' in element.json && element.json.wipe_mine == true) {
+					self.style.mine = {};
+				}
+				if ('wipe_all' in element.json && element.json.wipe_all == true) {
+					self.style.all = {};
+				}
+
+				if ('mine' in element.json) {
+					for (let [key, value] of Object.entries(element.json.mine)) {
+						if (value === null) {
+							delete self.style.mine[key];
+						}
+						else {
+							self.style.mine[key] = value;
+						}
+					}
+				}
+
+				if ('all' in element.json) {
+					for (let [key, value] of Object.entries(element.json.all)) {
+						if (value === null) {
+							delete self.style.all[key];
+						}
+						else {
+							self.style.all[key] = value;
+						}
+					}
+				}
+
+				setTimeout(function() {
+					CTE.utils.rebuildCss(self);
+					self.actOnNextElement();
+				}, delay);
 			},
 		},
 
@@ -882,6 +946,10 @@
 				}
 
 				return false;
+			},
+			rebuildCss: function(self) {
+				// ##### TODO: build the CSS text
+				self.style.sheet.replaceSync("a { color: red; }"); // ##### TODO: Replace this text with the built text
 			},
 		},
 
