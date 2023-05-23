@@ -88,8 +88,8 @@
 			CTE.fetchElements(self, settings.queue);
 
 			// Updates to our div
-			div.data('cte-name', settings.name);
-			div.addClass('cte-container');
+			div.data('convoTreeEngine-name', settings.name);
+			div.addClass('convoTreeEngine-container');
 
 			return self;
 		},
@@ -892,7 +892,6 @@
 					$(this).closest('.convoTreeEngine-prompt-frame').remove();
 					self.actOnNextElement();
 				});
-				htmlDiv.find('.convoTreeEngine-prompt-frame').css('cursor','pointer');
 			},
 			choices: function(self, choicesDiv) {
 				choicesDiv.on('click', '.convoTreeEngine-choice-frame', function() {
@@ -907,7 +906,6 @@
 
 					self.actOnNextElement();
 				});
-				choicesDiv.find('.convoTreeEngine-choice-frame').css('cursor','pointer');
 			},
 		},
 	};
