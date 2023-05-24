@@ -61,7 +61,7 @@ $examples{item} = {
 		frame   => 'html classes',
 	},
 	function => 'functionName',
-	delay    => '500',
+	delay    => 500,
 	prompt   => JSON::false,
 	arbit    => {
 		"Additional details" => {
@@ -116,7 +116,7 @@ $examples{note} = {
 
 $examples{raw} = {
 	html   => 'A string that will be interpreted as HTML and displayed to the user',
-	delay  => 1000,
+	delay  => 500,
 	prompt => JSON::false,
 	stop   => JSON::false,
 	arbit  => {
@@ -238,7 +238,7 @@ $examples{choice} = {
 			arbit         => 'EVEN MORE arbitrary data',
 		},
 	],
-	delay   => 1000,
+	delay   => 500,
 	classes => 'html classes',
 	arbit   => {
 		"Additional details" => {
@@ -272,7 +272,7 @@ $examples{display} = {
 	},
 	wipe_mine => JSON::false,
 	wipe_all  => JSON::false,
-	delay     => '1000',
+	delay     => 500,
 	arbit     => {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
@@ -296,7 +296,7 @@ $examples{do} = {
 		'arg1',
 		'arg2',
 	],
-	delay    => '1000',
+	delay    => 500,
 	stop     => JSON::false,
 	arbit    => {
 		"Additional details" => {
@@ -304,7 +304,7 @@ $examples{do} = {
 			"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
 			"3" => 'The "stop" key is optional. It contain a boolean value indicating whether or not the flow of elements sshould stop after this point (identical to a "stop" block)',
 			"4" => 'The function name must be a string of letters, numbers, and underscores',
-			"5" => 'The "args" key is optional; If the argument is a string beginning with "var:", it will be assumed that everything following is a variable name. The value of that variable will be used',
+			"5" => 'The "args" key is optional; It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 		},
 	},
 };

@@ -479,7 +479,7 @@ an array of strings indicating validators for what can be present.
 	},
 	do       => {
 		function => [1, 'word'],
-		args     => [0, 'array'],
+		args     => [0, 'ignore'],
 		delay    => [0, 'nonNegInt'],
 		stop     => [0, 'boolean'],
 		arbit    => [0, 'ignore'],

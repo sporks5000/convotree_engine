@@ -252,6 +252,7 @@
 			/* Given one or more element identifiers, skip ahead in the queue until one of them is
 			   the next item in the queue (or the end is reached) */
 			if (typeof idents === 'undefined' || idents === null) {
+				// ##### TODO: Is this the correct behavior here?
 				return;
 			}
 
@@ -290,6 +291,7 @@
 		},
 
 		dropQueue: function(self) {
+			/* Drop the entirety of the queue */
 			self.queue = {
 				nested_in: null,
 				current: [],
@@ -645,6 +647,52 @@
 				setTimeout(function() {
 					CTE.utils.rebuildCss(self);
 					self.actOnNextElement();
+				}, delay);
+			},
+			random: function(self, element) {
+				// Start with a deep copy of the paths
+				let paths = JSON.parse(JSON.stringify(element.json.paths));
+				const funcName = element.json.function ?? null;
+
+				if (funcName !== null && self.functions[funcName]) {
+					paths = self.functions[funcName]({
+						self: self,
+						element: element,
+						paths: paths,
+					});
+				}
+
+				if (paths === null || paths.length === 0) {
+					return self.actOnNextElement();
+				}
+
+				let pathWeight = [];
+				paths.forEach(function(path, index) {
+					const a = Array(Math.floor(Number(path[0]))).fill(path[1]);
+					pathWeight.push(...a);
+				});
+
+				const result = Math.floor(Math.random() * pathWeight.length);
+
+				self.addToQueue(pathWeight[result]);
+				self.actOnNextElement();
+			},
+			do: function(self, element) {
+				let delay = element.json.delay ?? 500;
+				delay = Number(delay);
+
+				setTimeout(function() {
+					const funcName = element.json.function ?? null;
+					if (funcName !== null && self.functions[funcName]) {
+						self.functions[funcName]({
+							self: self,
+							element: element,
+						});
+					}
+
+					if (!'stop' in element.json || element.json.stop == false) {
+						self.actOnNextElement();
+					}
 				}, delay);
 			},
 		},
@@ -1028,7 +1076,7 @@
 				});
 			},
 			choices: function(self, choicesDiv) {
-				choicesDiv.on('click', '.convoTreeEngine-choice-frame', function() {
+				choicesDiv.on('click', '.convoTreeEngine-choice-frame.convoTreeEngine-active-frame', function() {
 					let choice = $(this).closest('.convoTreeEngine-choice-frame');
 					let choiceData = choice.data();
 
