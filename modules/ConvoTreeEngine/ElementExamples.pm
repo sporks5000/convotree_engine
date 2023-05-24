@@ -164,6 +164,7 @@ $examples{if} = {
 		[
 			'var=0',
 			[1,2],
+			'optional text (not displayed to the user)',
 		],
 	],
 	arbit => {
@@ -173,6 +174,7 @@ $examples{if} = {
 			"3" => 'Each nested array within the "cond" key will contain either one or two items',
 			"3.a" => 'The first item will be either a condition string, a condition block, an array of condition strings, or undef/null',
 			"3.b" => 'The second item (if present) will either be a single element identifier, or an arrayref of element identifiers',
+			"3.c" => 'If a third item is present, it willbe arbitrary text that is not displayed to the user',
 			"4" => 'The conditions within these nested array will be processed in the order given.',
 			"4.a" => 'The first condition to return true will determine that path the narrative takes.',
 			"4.b" => 'further conditions beyond the first the passed as true will be ignored.',

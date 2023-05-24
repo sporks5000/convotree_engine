@@ -284,11 +284,12 @@ my $ifConditionBlock = sub {
 	return 0 unless $self->validateValue($value, 'array');
 	### The first element will either be undefined or a condition string
 	return 0 unless $self->validateValue($value->[0], 'condition');
-	return $self->fail('If condition blocks should be an array of one or two elements', $value) if @$value > 2;
-	return $self->pass('Valid condition block with one element', $value) unless @$value == 2;
+	return $self->fail('If condition blocks should be an array of one, two, or three elements', $value) if @$value > 3;
+	return $self->pass('Valid condition block with one element', $value) if @$value == 1;
 	### If the second element is present, it should be an element ID or an array of element IDs
 	return 0 unless $self->validateValue($value->[1], ['undefined', 'elementList']);
-	return $self->pass('Valid condition block with two elements', $value);
+	return 0 if @$value == 3 && !$self->validateValue($value->[2], 'string');
+	return $self->pass('Valid condition block with two or three elements', $value);
 };
 my $variableUpdates = sub {
 	### Returns true if given a hash of variable names to strings (or undefineds)

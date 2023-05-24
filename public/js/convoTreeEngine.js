@@ -361,13 +361,16 @@
 
 					if (/^[+*\/-]=\s?(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(value)) {
 						// If the value indicates that we're updating a numerical value. I.E. "+=3"
-						let current = self.variables[key];
+						let current = self.variables[key] ?? 0;
 						if (typeof current === 'string') {
-							self.variables[key] = value;
-							continue;
-						}
-						else if (typeof current === 'undefined' || current === null) {
-							current = 0;
+							if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(current)) {
+								current = Number(current);
+							}
+							else {
+								// If the current value has non-numerical characters, then assign as if it's a string
+								self.variables[key] = value;
+								continue;
+							}
 						}
 
 						const operator = value.substring(0,2);
@@ -543,7 +546,9 @@
 				for (var i = 0; i < condBlocks.length; i++) {
 					const conditionIsMet = CTE.utils.assessCondition(self, condBlocks[i][0], element, true);
 					if (conditionIsMet == true) {
-						self.addToQueue(condBlocks[i][1]);
+						if (condBlocks[i].length > 1) {
+							self.addToQueue(condBlocks[i][1]);
+						}
 						break;
 					}
 				};
@@ -964,7 +969,7 @@
 									condValue = condValue.replace("\x00", quotedString);
 								}
 
-								let varValue = self.variables[varName];
+								let varValue = self.variables[varName] ?? 0;
 								if (/[<>]|'=='/.test(operator)) {
 									// If the operator indicates that both should be a number...
 									if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(condValue) || /^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(varValue)) {
