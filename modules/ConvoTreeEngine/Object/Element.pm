@@ -374,7 +374,14 @@ sub listReferencedElements {
 			push @elements, @{$jsonRef->{queue}};
 		}
 		else {
-			push @elements, $jsonRef->{get};
+			push @elements, $jsonRef->{queue};
+		}
+
+		if (ref $jsonRef->{jump}) {
+			push @elements, @{$jsonRef->{jump}};
+		}
+		else {
+			push @elements, $jsonRef->{jump};
 		}
 	}
 	elsif ($type eq 'random') {
@@ -500,6 +507,7 @@ sub sanitizeNesting {
 		elsif ($type eq 'elements') {
 			$jsonRef->{queue} = $element->_sanitize_nesting_arrays($jsonRef->{queue}, $args);
 			$jsonRef->{get} = $element->_sanitize_nesting_arrays($jsonRef->{get}, $args);
+			$jsonRef->{jump} = $element->_sanitize_nesting_arrays($jsonRef->{jump}, $args);
 		}
 		elsif ($type eq 'random') {
 			foreach my $path (@{$jsonRef->{paths}}) {

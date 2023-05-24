@@ -265,16 +265,10 @@ $examples{choice} = {
 
 $examples{display} = {
 	mine      => {
-		'css selector' => {
-			'text-align'       => 'left',
-			'background-color' => '#000000',
-		},
+		'css selector' => 'text-align: left; background-color: #000000;',
 	},
-	all       =>{
-		'css selector' => {
-			'text-align'       => 'left',
-			'background-color' => '#000000',
-		},
+	all       => {
+		'css selector' => 'text-align: left; background-color: #000000;',
 	},
 	wipe_mine => JSON::false,
 	wipe_all  => JSON::false,
@@ -326,6 +320,7 @@ $examples{elements} = {
 	get   => [1, 2, 3],
 	queue => [1, 2],
 	drop  => JSON::false,
+	jump  => '1',
 	arbit => {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
@@ -333,6 +328,8 @@ $examples{elements} = {
 			"3" => 'Elements specified under the "get" key will be requested from the server (if they have not been already)',
 			"4" => 'Elements specified under the "queue" key will be added to the queue of elements to process next',
 			"5" => 'If the "drop" key is true, drop all existing items from the queue',
+			"6" => 'If the "jump" key is present, move forward in the queue until the element specified is the next element (or until the end of the queue is reached)',
+			"6.a" => 'If an array of elements is given instead of a single one, move forward until ANY of them are the next one',
 		},
 	},
 };

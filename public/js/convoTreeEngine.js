@@ -81,8 +81,9 @@
 				actOnNextElement: function() {return CTE.actOnNextElement(this);},
 				hasSeenElement: function(ident) {return CTE.hasSeenElement(this, ident);},
 				markElementSeen: function(element) {return CTE.markElementSeen(this, element);},
-				addToQueue:function(idents) {return CTE.addToQueue(this, idents);},
-				dropQueue:function(idents) {return CTE.dropQueue(this);},
+				addToQueue: function(idents) {return CTE.addToQueue(this, idents);},
+				skipTo: function(idents) {return CTE.skipTo(this, idents);},
+				dropQueue: function(idents) {return CTE.dropQueue(this);},
 				queueLength: function() {return CTE.queueLength(this)},
 			};
 			['variables', 'functions'].forEach(function(item, index) {
@@ -213,8 +214,8 @@
 			}
 
 			if (self.queue.current.length) {
-				const id = self.queue.current.shift();
-				return self.actOnElement(id);
+				const ident = self.queue.current.shift();
+				return self.actOnElement(ident);
 			}
 		},
 
@@ -245,6 +246,47 @@
 			}
 
 			self.queue.current = idents;
+		},
+
+		skipTo: function(self, idents) {
+			/* Given one or more element identifiers, skip ahead in the queue until one of them is
+			   the next item in the queue (or the end is reached) */
+			if (typeof idents === 'undefined' || idents === null) {
+				return;
+			}
+
+			let skipTos = {};
+			if (Array.isArray(idents)) {
+				idents.forEach(function(ident, index) {
+					skipTos[ident] = true;
+				});
+			}
+			else {
+				skipTos[idents] = true;
+			}
+
+			outerLoop:
+			while (true) {
+				while (self.queue.nested_in && !self.queue.current.length) {
+					self.queue = self.queue.nested_in;
+				}
+
+				if (!self.queue.nested_in && !self.queue.current.length) {
+					break outerLoop;
+				}
+
+				innerLoop:
+				while (self.queue.current.length) {
+					const ident = self.queue.current[0];
+					const element = self.getElement(ident);
+					if (skipTos[element.id] || skipTos[element.namecat]) {
+						break outerLoop;
+					}
+					self.queue.current.shift();
+				}
+			}
+
+			return;
 		},
 
 		dropQueue: function(self) {
@@ -368,6 +410,9 @@
 				}
 				if ('queue' in element.json) {
 					self.addToQueue(element.json.queue);
+				}
+				if ('jump' in element.json) {
+					self.skipTo(element.json.jump);
 				}
 				if ('get' in element.json) {
 					self.fetchElements(element.json.get);

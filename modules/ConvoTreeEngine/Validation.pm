@@ -488,6 +488,7 @@ an array of strings indicating validators for what can be present.
 		get   => [0, 'elementList'],
 		queue => [0, 'elementList'],
 		drop  => [0, 'boolean'],
+		jump  => [0, 'elementList'],
 		arbit => [0, 'ignore'],
 	},
 	random   => {
