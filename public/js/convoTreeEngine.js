@@ -178,12 +178,19 @@
 
 		// Return the object containing element data. Return nothing if it's not in our data
 		getElement: function(self, ident) {
+			let element;
 			if (self.elements.by_id[ident]) {
-				return self.elements.by_id[ident];
+				element = self.elements.by_id[ident];
 			}
 			else if (self.elements.by_namecat[ident]) {
-				return self.elements.by_namecat[ident];
+				element = self.elements.by_namecat[ident];
 			}
+			else {
+				return;
+			}
+
+			// Return a deep copy of the element
+			return JSON.parse(JSON.stringify(element));
 		},
 
 		// Given our object and an ID or namecat, act on the corresponding element
@@ -479,8 +486,7 @@
 					htmlSpan = CTE.utils.handleNestedItemText(self, htmlSpan, text.text);
 				}
 				else {
-					const speaker = text.speaker || '';
-					const parsedText = CTE.utils.parseItemText(self, speaker, text.text);
+					const parsedText = CTE.utils.parseItemText(self, text.speaker, text.text);
 					htmlSpan.html(parsedText);
 				}
 				htmlDiv.append(htmlSpan);
@@ -534,6 +540,7 @@
 							text: prompt,
 						},
 					}, {type: 'prompt'});
+					promptDiv.addClass('convoTreeEngine-actionable');
 
 					htmlDiv.append(promptDiv);
 					CTE.listeners.itemPrompt(self, htmlDiv);
@@ -588,10 +595,6 @@
 					}
 
 					choices.forEach(function(choice, index) {
-						if ('classes' in choice.data) {
-							choicesDiv.addClass(choice.data.classes);
-						}
-
 						choice.element = self.getElement(choice.data.element);
 						if (!choice.element) {
 							// We've requested the elements that were listed. If it's not here now, then there's something wrong.
@@ -603,7 +606,18 @@
 								// If the user has set a function as part of assessing the choice, it's possible that
 								// they could have it return null (I.E. even though the settings and conditions for
 								// the choice would otherwise have it displayed, they do not want it to be displayed).
-								choicesDiv.data(choice.data);
+
+								if ('classes' in choice.data) {
+									choiceDiv.addClass(choice.data.classes);
+								}
+								if (choice.active) {
+									choiceDiv.addClass('convoTreeEngine-actionable');
+								}
+								else {
+									choiceDiv.addClass('convoTreeEngine-inactionable');
+								}
+
+								choiceDiv.data('choiceData', choice.data);
 								choicesDiv.append(choiceDiv);
 							}
 						}
@@ -655,8 +669,7 @@
 				}, delay);
 			},
 			random: function(self, element) {
-				// Start with a deep copy of the paths
-				let paths = JSON.parse(JSON.stringify(element.json.paths));
+				let paths = element.json.paths;
 				const funcName = element.json.function ?? null;
 
 				if (funcName !== null && self.functions[funcName]) {
@@ -777,6 +790,13 @@
 				// Make sure that we're html safe
 				text = CTE.utils.escapeStr(text);
 
+				let spokenOpen = '&quot;';
+				let spokenClose = '&quot;';
+				if (speaker) {
+					spokenOpen = '<span class="' + speaker + '">&quot;';
+					spokenClose = '&quot;</span>';
+				}
+
 				text = text.replace(/\r?\n\r?/g, '<br>')    // newline characters becomes linebreaks
 					.replace(/\\_/g, "\x01")              // replace all escaped underscores
 					.replace(/_([^_]*)_/g, "<i>$1</i>")   // italicize text within underscores
@@ -785,7 +805,7 @@
 					.replace(/\*([^*]*)\*/g, "<b>$1</b>") // bold text within asterisks
 					.replace(/\x01/g, '*')                // put asterisks back
 					.replace(/\\"/g, "\x01")              // replace all escaped quotes
-					.replace(/"([^"]*)"/g, '<span class="' + speaker + '">&quot;' + "$1" + '&quot;</span>') // quotes in spans
+					.replace(/"([^"]*)"/g, spokenOpen + "$1" + spokenClose) // quotes in spans
 					.replace(/\x01/g, '&quot;')           // bring back quotation marks
 					.replace(/\x00/g, '\\');              // bring back backslashes
 
@@ -1081,9 +1101,15 @@
 				});
 			},
 			choices: function(self, choicesDiv) {
-				choicesDiv.on('click', '.convoTreeEngine-choice-frame.convoTreeEngine-active-frame', function() {
+				choicesDiv.on('click', '.convoTreeEngine-actionable', function() {
 					let choice = $(this).closest('.convoTreeEngine-choice-frame');
-					let choiceData = choice.data();
+					choice.addClass('convoTreeEngine-action-taken').removeClass('convoTreeEngine-actionable');
+
+					let choiceData = choice.data('choiceData');
+					if (!choiceData) {
+						return;
+					}
+					choice.removeData('choiceData');
 
 					self.markElementSeen(choiceData.element);
 					self.addToQueue(choiceData.then);

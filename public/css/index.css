@@ -6,8 +6,10 @@
 	padding: 4px;
 	margin-bottom: 6px;
 }
-.convoTreeEngine-prompt-frame,
-.convoTreeEngine-choice-frame .convoTreeEngine-active-frame{
+.convoTreeEngine-choices-group {
+	margin-bottom: 6px;
+}
+.convoTreeEngine-actionable {
 	cursor: pointer;
 	border-width: 2px;
 	border-color: #000000;
@@ -21,12 +23,24 @@
 	min-width: 40px;
 	text-align: center;
 }
-.convoTreeEngine-choice-frame .convoTreeEngine-inactive-frame {
-	cursor: pointer;
+.convoTreeEngine-inactionable {
 	border-width: 2px;
 	border-color: #888888;
 	background-color: #DDDDDD;
 	color: #888888;
+	border-style: solid;
+	border-radius: 4px;
+	padding: 4px;
+	width: fit-content;
+	max-width: 70%;
+	margin-top: 8px;
+	margin-left: 20px;
+	min-width: 40px;
+	text-align: center;
+}
+.convoTreeEngine-action-taken {
+	border-width: 2px;
+	border-color: #000000;
 	border-style: solid;
 	border-radius: 4px;
 	padding: 4px;
