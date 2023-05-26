@@ -23,7 +23,7 @@ sub _read_only_fields {
 #== Field Accessors ==#
 #=====================#
 
-__PACKAGE__->createAccessors(qw/id type name category namecat json/);
+__PACKAGE__->createAccessors(qw/id type name category namecat json linked/);
 __PACKAGE__->createRelationships(
 	{
 		name   => 'nestedObjs',
@@ -65,7 +65,24 @@ sub create {
 	my $invocant = shift;
 	my $args     = $invocant->_prep_args(@_);
 
-	$args->{json} = ConvoTreeEngine::Validation->validateElementJson($args->{json}, $args->{type});
+	my $doNested = 1;
+	### 'linked' and 'skip_nested' do the same thing, but are opposites of eachother
+	if (exists $args->{linked} && !$args->{linked}) {
+		$doNested = 0;
+	}
+	if ($args->{skip_nested}) {
+		$doNested = 0;
+	}
+	delete $args->{linked};
+	delete $args->{skip_nested};
+
+	{
+		local $ConvoTreeEngine::Validation::STRICT_ITEM_TYPE_VALIDATION = 1;
+		unless ($doNested) {
+			$ConvoTreeEngine::Validation::STRICT_ITEM_TYPE_VALIDATION = 0;
+		}
+		$args->{json} = ConvoTreeEngine::Validation->validateElementJson($args->{json}, $args->{type});
+	}
 
 	$invocant->_confirm_namecat($args);
 
@@ -74,7 +91,7 @@ sub create {
 	$invocant->atomic(sub {
 		$self = $invocant->SUPER::create($args);
 
-		$self->doNestedElements;
+		$self->doNestedElements if $doNested;
 	});
 
 	return $self;
@@ -155,7 +172,7 @@ sub update {
 	$self->_confirm_namecat($args);
 
 	$self->atomic(sub {
-		if (($self->namecat xor $args->{namecat}) || $self->namecat ne $args->{namecat}) {
+		if (($self->namecat xor $args->{namecat}) || $self->namecat && $self->namecat ne $args->{namecat}) {
 			$self->sanitizeNesting({namecat => $args->{namecat}});
 		}
 		$self->clearNestedElements unless $skip_nested;
@@ -447,6 +464,8 @@ sub doNestedElements {
 		}
 	}
 
+	$self->update({linked => 1, skip_nested => 1});
+
 	return;
 }
 
@@ -458,6 +477,8 @@ sub clearNestedElements {
 	ConvoTreeEngine::Mysql->doQuery(qq/
 		DELETE FROM $table WHERE element_id = ?;
 	/, [$self->id]);
+	
+	$self->update({linked => 0, skip_nested => 1});
 
 	return;
 }
@@ -564,6 +585,23 @@ sub _sanitize_nesting_arrays {
 
 	return $elements[0] if scalar(@elements) == 1;
 	return \@elements;
+}
+
+=head2 linkUnlinked
+
+Find all of the elements that have not been marked as linked, and link them.
+
+=cut
+
+sub linkUnlinked {
+	my $class = shift;
+
+	my @elements = $class->search({linked => 0});
+	foreach my $element (@elements) {
+		$element->doNestedElements;
+	}
+
+	return;
 }
 
 #===========================#

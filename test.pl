@@ -33,12 +33,16 @@ $dbHandler = ConvoTreeEngine::Mysql->getConnection;
 #== Element Validation ==#
 #========================#
 
-my $element = ConvoTreeEngine::Object::Element->create({
-	type => 'raw',
-	json => {
-		html => 'Some text',
-	},
-});
+### Start by making three generic elements
+my $element;
+for (1 .. 3) {
+	$element = ConvoTreeEngine::Object::Element->create({
+		type => 'raw',
+		json => {
+			html => 'Some text',
+		},
+	});
+}
 
 my $prefix = $ConvoTreeEngine::Config::tablePrefix;
 my $rows = ConvoTreeEngine::Mysql->fetchRows(qq/SELECT * FROM ${prefix}c_element_types/);

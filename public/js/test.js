@@ -3,7 +3,7 @@
 
 	$(document).ready(function(){
 		const cte = window.convoTree.launch({
-			queue: [1,2,3,6],
+			queue: [1,3,2,3,6],
 			div: $('.put-things-here'),
 			name: 'perltest',
 			api_url: 'https://perltest.com/data/',
@@ -202,6 +202,7 @@
 						mine: {
 							'.bluetext': 'color: #0000FF;',
 						},
+						delay: 0,
 					},
 				},
 				{

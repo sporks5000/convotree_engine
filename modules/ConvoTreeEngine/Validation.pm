@@ -320,7 +320,7 @@ my $choice = sub {
 	return 1 unless $STRICT_ITEM_TYPE_VALIDATION;
 	my $element = ConvoTreeEngine::Object::Element->find($value->{element});
 	return $self->fail("Element '$value->{element}' does not exist", $value) unless $element;
-	return $self->fail("Element '$value->{element}' is not an item", $value) unless $element->type eq 'item';
+	return $self->fail("Element '$value->{element}' is not type 'item' or 'raw'", $value) unless $element->type eq 'item' || $element->type eq 'raw';
 	return 1;
 };
 my $randomPath = sub {

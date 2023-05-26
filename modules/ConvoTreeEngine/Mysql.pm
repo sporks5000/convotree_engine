@@ -189,6 +189,7 @@ sub createTables {
 					category VARCHAR(253),
 					namecat VARCHAR(256),
 					json JSON NOT NULL,
+					linked BOOLEAN NOT NULL DEFAULT false,
 					INDEX ${prefix}element_category_index
 						(category) USING BTREE,
 					INDEX ${prefix}element_namecat_index
