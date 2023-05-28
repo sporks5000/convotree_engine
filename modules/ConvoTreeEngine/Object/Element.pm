@@ -61,11 +61,18 @@ __PACKAGE__->createRelationships(
 #== CRUD ==#
 #==========#
 
+my $DELAY_NESTED = 0;
+sub delayNested {
+	my $class = shift;
+	my $delay = shift // 1;
+	return $DELAY_NESTED = $delay;
+}
+
 sub create {
 	my $invocant = shift;
 	my $args     = $invocant->_prep_args(@_);
 
-	my $doNested = 1;
+	my $doNested = !$DELAY_NESTED;
 	### 'linked' and 'skip_nested' do the same thing, but are opposites of eachother
 	if (exists $args->{linked} && !$args->{linked}) {
 		$doNested = 0;
@@ -73,7 +80,7 @@ sub create {
 	if ($args->{skip_nested}) {
 		$doNested = 0;
 	}
-	delete $args->{linked};
+	$args->{linked} = $doNested;
 	delete $args->{skip_nested};
 
 	{
