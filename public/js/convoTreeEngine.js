@@ -84,7 +84,9 @@
 				addToQueue: function(idents) {return CTE.addToQueue(this, idents);},
 				skipTo: function(idents) {return CTE.skipTo(this, idents);},
 				dropQueue: function(idents) {return CTE.dropQueue(this);},
-				queueLength: function() {return CTE.queueLength(this)},
+				queueLength: function() {return CTE.queueLength(this);},
+				getVariableValue: function(varName) {return CTE.getVariableValue(this, varName);},
+				setVariableValue: function(varName, value) {return CTE.setVariableValue(this, varName, value);},
 			};
 			['variables', 'functions'].forEach(function(item, index) {
 				self[item] = settings[item] || {};
@@ -354,58 +356,74 @@
 			return qLength;
 		},
 
+		getVariableValue: function(self, varName) {
+			/* Given the name of a variable, return its value (if any) */
+			if (!varName in self.variables) {
+				return null;
+			}
+
+			return self.variables[varName];
+		},
+
+		setVariableValue: function(self, varName, value) {
+			/* Given the name of a variable and a value, set the variable of that name to the specified
+			   value. If the value appears to contain an operator, instead act on that operator as
+			   expected and set the variable to the result */
+			if (typeof value === 'number') {
+				value = String(value);
+			}
+			else if (value === null) {
+				// If it's null, delete the variable name from the variables hash
+				delete self.variables[varName];
+				return;
+			}
+
+			if (/^[+*\/-]=\s?(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(value)) {
+				// If the value indicates that we're updating a numerical value. I.E. "+=3"
+				let current = self.getVariableValue(varName) ?? 0;
+				if (typeof current === 'string') {
+					if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(current)) {
+						current = Number(current);
+					}
+					else {
+						// If the current value has non-numerical characters, then assign as if it's a string
+						self.variables[varName] = value;
+						return;
+					}
+				}
+
+				const operator = value.substring(0,2);
+				const number = Number(value.substring(2).trim());
+
+				if (operator === '+=') {
+					current += number;
+				}
+				else if (operator === '-=') {
+					current += number;
+				}
+				else if (operator === '*=') {
+					current *= number;
+				}
+				else if (operator === '/=') {
+					current /= number;
+				}
+
+				self.variables[varName] = current;
+			}
+			else if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(value)) {
+				// If the value is just a number
+				self.variables[varName] = Number(value);
+			}
+			else {
+				// If the value is a string
+				self.variables[varName] = value;
+			}
+		},
+
 		elementTypes: {
 			variable: function(self, element) {
 				for (let [key, value] of Object.entries(element.json.update)) {
-					if (typeof value === 'number') {
-						value = String(value);
-					}
-					else if (value === null) {
-						// If it's null, delete the key from the variables hash
-						delete self.variables[key];
-						continue;
-					}
-
-					if (/^[+*\/-]=\s?(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(value)) {
-						// If the value indicates that we're updating a numerical value. I.E. "+=3"
-						let current = self.variables[key] ?? 0;
-						if (typeof current === 'string') {
-							if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(current)) {
-								current = Number(current);
-							}
-							else {
-								// If the current value has non-numerical characters, then assign as if it's a string
-								self.variables[key] = value;
-								continue;
-							}
-						}
-
-						const operator = value.substring(0,2);
-						const number = Number(value.substring(2).trim());
-
-						if (operator === '+=') {
-							current += number;
-						}
-						else if (operator === '-=') {
-							current += number;
-						}
-						else if (operator === '*=') {
-							current *= number;
-						}
-						else if (operator === '/=') {
-							current /= number;
-						}
-
-						self.variables[key] = current;
-					}
-					else if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(value)) {
-						// If the value is just a number
-						self.variables[key] = Number(value);
-					}
-					else {
-						// If the value is a string
-						self.variables[key] = value;
-					}
+					self.setVariableValue(key, value);
 				}
 
 				// Always go straight into the next element from this element type
@@ -747,10 +765,9 @@
 					let chunk = chunks.shift();
 					varName = varName.substring(1, varName.length - 1);
 
-					let value = self.variables[varName];
+					let value = self.getVariableValue(varName) ?? '[UNDEFINED]';
 					// The below code reproduces SOME of the actions within variableValueToDisplay.
 					// Specifically we do NOT want to replace linebreaks with '<br>' tags.
-					value ??= '[UNDEFINED]';
 					value = String(value);
 					value = CTE.utils.escapeStr(value);
 					value = value.replace(/"/g, '&quot;');
@@ -814,7 +831,7 @@
 					while (vars.length) {
 						let varName = vars.shift();
 						varName = varName.substring(1, varName.length - 1);
-						let value = self.variables[varName];
+						let value = self.getVariableValue(varName);
 						value = CTE.utils.variableValueToDisplay(value);
 						text = text.replace("\x07", value);
 					}
@@ -859,7 +876,7 @@
 					else {
 						// null content means that there is a third element and it is the name of a variable
 						let varName = block[2];
-						content = self.variables[varName];
+						content = self.getVariableValue(varName);
 						content = CTE.utils.variableValueToDisplay(content);
 						span.append(content);
 					}
@@ -989,7 +1006,7 @@
 									condValue = condValue.replace("\x00", quotedString);
 								}
 
-								let varValue = self.variables[varName] ?? 0;
+								let varValue = self.getVariableValue(varName) ?? 0;
 								if (/[<>]|'=='/.test(operator)) {
 									// If the operator indicates that both should be a number...
 									if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(condValue) || /^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(varValue)) {
