@@ -1122,8 +1122,7 @@
 					styleText.push(key + ' { ' + value + ' }');
 				}
 
-				styleText = styleText.join("/n");
-
+				styleText = styleText.join(" ");
 				self.style.sheet.replaceSync(styleText);
 
 				return styleText;
