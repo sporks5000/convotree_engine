@@ -468,6 +468,7 @@ an array of strings indicating validators for what can be present.
 		choices => [1, 'arrayOf(1,choice)'],
 		delay   => [0, 'nonNegInt'],
 		classes => [0, 'dashWords'],
+		keep    => [0, {enum => [qw/0 1 2/]}],
 		arbit   => [0, 'ignore'],
 	},
 	display  => {
@@ -565,6 +566,32 @@ sub validateRegex {
 	}
 }
 
+=head2 validateEnum
+
+Given a value and an enumerated list, ensure that the value is present in the enumerated list.
+
+=cut
+
+sub validateEnum {
+	my ($invocant, $value, $list) = @_;
+
+	my $self = ref $invocant ? $invocant : $invocant->new();
+
+	return $self->fail('cannot enum match an undefined value') unless defined $value;
+	return $self->fail('cannot enum match a reference', $value) if ref $value;
+	return $self->fail('cannot enum match if no enumerated list is given') unless defined $list;
+
+	$list = [$list] unless ref $list;
+
+	return $self->fail('can only enum match against an arrayref of strings') unless $self->validateValue($list, 'arrayOf(1,string)');
+
+	foreach my $listItem (@$list) {
+		return $self->pass("Value matches '$listItem'") if $value eq $listItem;
+	}
+
+	return $self->fail("Value did not match any of: '" . join("', '", sort(@$list)) . "'", $value);
+}
+
 =head2 validateValue
 
 Validate that a value is valid for the details given
@@ -650,11 +677,17 @@ sub validateValue {
 				$v = $validator;
 			}
 
-			ConvoTreeEngine::Exception::Input->throw(
-				error => "Validation '$v' does not exist",
-			) unless $validations{$v};
+			my $validator = $v;
+			my $ref = ref $validator || '';
+			if (ref eq '') {
+				ConvoTreeEngine::Exception::Input->throw(
+					error => "Validation '$v' does not exist",
+				) unless $validations{$v};
 
-			my $ref = ref $validations{$v} || '';
+				$validator = $validations{$v};
+				$ref = ref $validator || '';
+			}
+
 			if ($ref eq 'CODE') {
 				$isValid = $validations{$v}->($self, $value, @additional);
 
@@ -668,6 +701,17 @@ sub validateValue {
 				}
 				else {
 					$self->pass("Did not pass validation of type '$v'$stringAdditional", $value);
+				}
+			}
+			elsif ($ref eq 'HASH') {
+				foreach my $key (keys %$validator) {
+					if ($key eq 'regex') {
+						$isValid = $self->validateRegex($value, $validator->{$key}, @additional);
+					}
+					elsif ($key eq 'enum') {
+						$isValid = $self->validateEnum($value, $validator->{$key}, @additional);
+					}
+					last unless $isValid;
 				}
 			}
 			elsif ($ref eq '') {

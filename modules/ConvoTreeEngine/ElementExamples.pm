@@ -242,6 +242,7 @@ $examples{choice} = {
 	],
 	delay   => 500,
 	classes => 'html classes',
+	keep    => 1,
 	arbit   => {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
@@ -253,6 +254,10 @@ $examples{choice} = {
 			"3.d" => '"disp_inactive" is a boolean value indicating whether or not to display the choics if it is not active. Default: false',
 			"3.e" => '"arbit" is a place to store more optional arbitrary data. Can be useful for holding information if the condition calls a function',
 			"4" => 'These choices will be displayed to the user in the order given',
+			"5" => 'The "keep" key can be the numbers "0, 1, or 2. 1 is assumed by default',
+			"5.a" => 'If "keep" is set to "0", all choices will be removed from the display after one is selected.',
+			"5.b" => 'If "keep" is set to "1", all choices but the one that was selected will be removed from the display after one is selected.',
+			"5.c" => 'If "keep" is set to "2", all choices will remain displayed after one is selected.',
 		},
 	},
 };

@@ -31,10 +31,8 @@
 		- elements            - 
 		- variables           - 
 		- functions           - 
-		- activePromptFrame   - 
 		- activeChoiceFrame   - 
 		- activeItemFrame     - 
-		- inactivePromptFrame - 
 		- inactiveChoiceFrame - 
 		- inactiveItemFrame   - 
 		- defaultPrompt       - 
@@ -91,7 +89,7 @@
 			['variables', 'functions'].forEach(function(item, index) {
 				self[item] = settings[item] || {};
 			});
-			['activePromptFrame', 'activeChoiceFrame', 'activeItemFrame', 'inactivePromptFrame', 'inactiveChoiceFrame', 'inactiveItemFrame'].forEach(function(item, index) {
+			['activeChoiceFrame', 'activeItemFrame', 'inactiveChoiceFrame', 'inactiveItemFrame'].forEach(function(item, index) {
 				self[item] = settings[item] || null;
 			});
 			self.defaultPrompt = settings.defaultPrompt ?? '...';
@@ -242,6 +240,9 @@
 			if (!Array.isArray(idents)) {
 				idents = [idents];
 			}
+			if (idents.length === 0) {
+				return;
+			}
 
 			if (self.queue.current.length) {
 				// If there are already things in the queue, make a nested list to process through
@@ -326,6 +327,10 @@
 			   the user. Alternatively, if a third argument of "true" is passed, remove the
 			   indicator that the element has been seen.*/
 			unsee ??= false;
+			if (typeof element === 'undefined' || element === null) {
+				return;
+			}
+
 			if (typeof element !== 'object') {
 				// If we were passed an ID or a namecat, get the actual element data structure
 				element = self.getElement(element);
@@ -348,9 +353,9 @@
 			/* Return the number of elements currently present before ending the queue */
 			let qLength = self.queue.current.length;
 			let current = self.queue;
-			while(current.nested_in) {
+			while(current.nested_in !== null) {
 				current = current.nested_in;
-				length += current.current.length;
+				qLength += current.current.length;
 			}
 
 			return qLength;
@@ -539,31 +544,32 @@
 						}
 					}
 
+					self.div.append(htmlDiv);
+					self.markElementSeen(element);
+
 					if (prompt == false || prompt === "0" || self.queueLength() === 0) {
 						// If we're not prompting, go straight to the next element in the queue.
 						// If there are no elements in the queue (regardless of whether we would
 						// typically prompt), reach the end.
-						self.div.append(htmlDiv);
-						self.markElementSeen(element);
 						return self.actOnNextElement();
 					}
 					else if (prompt == true) {
 						prompt = self.defaultPrompt;
 					}
 
-					// Generate the div for the prompt in the same way that we generate the div for
-					// the item itself
-					let promptDiv = CTE.elementTypes.item(self, {
+					// Make a false choice element to display as the prompt
+					CTE.elementTypes.choice(self, {
 						json: {
-							text: prompt,
-						},
-					}, {type: 'prompt'});
-					promptDiv.addClass('convoTreeEngine-actionable');
-
-					htmlDiv.append(promptDiv);
-					CTE.listeners.itemPrompt(self, htmlDiv);
-					self.div.append(htmlDiv);
-					self.markElementSeen(element);
+							choices: [
+								{
+									cond: null,
+									text: prompt,
+								},
+							],
+							keep: 0,
+							delay: 0,
+						}
+					});
 				}, delay);
 			},
 			if: function(self, element) {
@@ -613,9 +619,22 @@
 					}
 
 					choices.forEach(function(choice, index) {
-						choice.element = self.getElement(choice.data.element);
+						if ('text' in choice.data) {
+							// This cannot be present in a valid choice element, so it will only be here if we're composing
+							// a choice based on a pseudo element.
+							choice.element = {
+								json: {
+									text: choice.data.text,
+								},
+							}
+						}
+						else {
+							choice.element = self.getElement(choice.data.element);
+						}
+
 						if (!choice.element) {
 							// We've requested the elements that were listed. If it's not here now, then there's something wrong.
+							// ##### TODO: Error of some kind
 							return;
 						}
 						if (choice.active == true || choice.data.display_inactive == true) {
@@ -641,9 +660,11 @@
 						}
 					});
 
-					CTE.listeners.choices(self, choicesDiv);
+					let keep = element.json.keep ?? 1;
+					keep = Number(keep);
+
 					setTimeout(function() {
-						CTE.listeners.choices(self, choicesDiv);
+						CTE.listeners.choices(self, choicesDiv, keep);
 						self.div.append(choicesDiv);
 					}, delay);
 				});
@@ -1110,14 +1131,7 @@
 		},
 
 		listeners: {
-			itemPrompt: function(self, htmlDiv) {
-				htmlDiv.on('click', '.convoTreeEngine-prompt-frame', function() {
-					// ##### TODO: Will child elements inherit this?
-					$(this).closest('.convoTreeEngine-prompt-frame').remove();
-					self.actOnNextElement();
-				});
-			},
-			choices: function(self, choicesDiv) {
+			choices: function(self, choicesDiv, keep) {
 				choicesDiv.on('click', '.convoTreeEngine-actionable', function() {
 					let choice = $(this).closest('.convoTreeEngine-choice-frame');
 					choice.addClass('convoTreeEngine-action-taken').removeClass('convoTreeEngine-actionable');
@@ -1131,8 +1145,15 @@
 					self.markElementSeen(choiceData.element);
 					self.addToQueue(choiceData.then);
 
-					// Remove all of the choices other than this one
-					choice.closest('.convoTreeEngine-choices-group').find('.convoTreeEngine-choice-frame').not(choice).remove();
+					if (keep === 0) {
+						choice.closest('.convoTreeEngine-choices-group').remove();
+					}
+					else if (keep === 1) {
+						choice.closest('.convoTreeEngine-choices-group').find('.convoTreeEngine-choice-frame').not(choice).remove();
+					}
+					else {
+						choice.closest('.convoTreeEngine-choices-group').find('.convoTreeEngine-choice-frame').not(choice).addClass('convoTreeEngine-action-not-taken');
+					}
 
 					self.actOnNextElement();
 				});
