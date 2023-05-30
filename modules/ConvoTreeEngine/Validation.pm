@@ -508,8 +508,8 @@ type.
 
 sub validateElementJson {
 	my $invocant  = shift;
-	my $json     = shift;
-	my $type     = shift;
+	my $json      = shift;
+	my $type      = shift;
 
 	my $self = ref $invocant ? $invocant : $invocant->new();
 

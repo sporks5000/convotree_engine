@@ -72,7 +72,7 @@ sub create {
 	my $invocant = shift;
 	my $args     = $invocant->_prep_args(@_);
 
-	my $doNested = !$DELAY_NESTED;
+	my $doNested = !$DELAY_NESTED || 0;
 	### 'linked' and 'skip_nested' do the same thing, but are opposites of eachother
 	if (exists $args->{linked} && !$args->{linked}) {
 		$doNested = 0;
@@ -168,11 +168,15 @@ sub update {
 	my $self = shift;
 	my $args = $self->_prep_args(@_);
 
-	my $skip_nested = delete $args->{skip_nested};
+	my $skip_nested = delete $args->{skip_nested} // $DELAY_NESTED;
 	if (exists $args->{json}) {
 		$args->{json} = ConvoTreeEngine::Validation->validateElementJson($args->{json}, $self->type);
+		if ($skip_nested) {
+			$args->{linked} = 0;
+		}
 	}
 	else {
+		### If were not updating the JSON, there's no reason to do nested
 		$skip_nested = 1;
 	}
 
@@ -180,7 +184,12 @@ sub update {
 
 	$self->atomic(sub {
 		if (($self->namecat xor $args->{namecat}) || $self->namecat && $self->namecat ne $args->{namecat}) {
-			$self->sanitizeNesting({namecat => $args->{namecat}});
+			if ($skip_nested) {
+				##### TODO: If we're changing the namecat AND skippin gnested... how do we handle that?
+			}
+			else {
+				$self->sanitizeNesting({namecat => $args->{namecat}});
+			}
 		}
 		$self->clearNestedElements unless $skip_nested;
 		$self = $self->SUPER::update($args);
@@ -308,7 +317,7 @@ sub _confirm_namecat {
 	my $args     = shift;
 
 	if ($args->{namecat}) {
-		my ($name, $cat) = split m/:/, $args->{namecat};
+		my ($cat, $name) = split m/:/, $args->{namecat};
 		if (defined $name && defined $cat) {
 			if ((defined $args->{name} && $name ne $args->{name}) || (defined $args->{category} && $cat ne $args->{category})) {
 				require Data::Dumper;
@@ -421,12 +430,13 @@ sub listReferencedElements {
 
 	my %element_ids;
 	my %element_namecats;
-	foreach my $element (@elements) {
-		if ($element =~ m/^[0-9]+\z/) {
-			$element_ids{$element} = 1;
+	foreach my $elementIdent (@elements) {
+		next unless defined $elementIdent;
+		if ($elementIdent =~ m/^[0-9]+\z/) {
+			$element_ids{$elementIdent} = 1;
 		}
 		else {
-			$element_namecats{$element} = 1;
+			$element_namecats{$elementIdent} = 1;
 		}
 	}
 
@@ -471,7 +481,7 @@ sub doNestedElements {
 		}
 	}
 
-	$self->update({linked => 1, skip_nested => 1});
+	$self->update({linked => 1});
 
 	return;
 }
@@ -485,7 +495,7 @@ sub clearNestedElements {
 		DELETE FROM $table WHERE element_id = ?;
 	/, [$self->id]);
 	
-	$self->update({linked => 0, skip_nested => 1});
+	$self->update({linked => 0});
 
 	return;
 }
@@ -534,8 +544,8 @@ sub sanitizeNesting {
 		}
 		elsif ($type eq 'elements') {
 			$jsonRef->{queue} = $element->_sanitize_nesting_arrays($jsonRef->{queue}, $args);
-			$jsonRef->{get} = $element->_sanitize_nesting_arrays($jsonRef->{get}, $args);
-			$jsonRef->{jump} = $element->_sanitize_nesting_arrays($jsonRef->{jump}, $args);
+			$jsonRef->{get}   = $element->_sanitize_nesting_arrays($jsonRef->{get},   $args);
+			$jsonRef->{jump}  = $element->_sanitize_nesting_arrays($jsonRef->{jump},  $args);
 		}
 		elsif ($type eq 'random') {
 			foreach my $path (@{$jsonRef->{paths}}) {
@@ -603,8 +613,9 @@ Find all of the elements that have not been marked as linked, and link them.
 sub linkUnlinked {
 	my $class = shift;
 
-	my @elements = $class->search({linked => 0});
+	my @elements = $class->search({linked => 0}, {order_by => 'id ASC'});
 	foreach my $element (@elements) {
+		$element->clearNestedElements;
 		$element->doNestedElements;
 	}
 
