@@ -614,8 +614,15 @@ sub linkUnlinked {
 
 	my @elements = $class->search({linked => 0}, {order_by => 'id ASC'});
 	foreach my $element (@elements) {
-		$element->clearNestedElements;
-		$element->doNestedElements;
+		eval {
+			$element->clearNestedElements;
+			$element->doNestedElements;
+		};
+		if (my $ex = $@) {
+			print $element->namecat . "\n";
+			ConvoTreeEngine::Exception::Unexpected->promote($ex);
+			$ex->rethrow;
+		}
 	}
 
 	return;

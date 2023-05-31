@@ -1091,7 +1091,7 @@
 								}
 
 								let varValue = self.getVariableValue(varName) ?? 0;
-								if (/[<>]|'=='/.test(operator)) {
+								if (/[<>]|==/.test(operator)) {
 									// If the operator indicates that both should be a number...
 									if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(condValue) || /^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(varValue)) {
 										// ...and they both look like a number, make sure they're stored as numbers
@@ -1126,22 +1126,22 @@
 									}
 								}
 								else if (operator === '>') {
-									if (condValue <= varValue) {
-										pass = false;
-									}
-								}
-								else if (operator === '<') {
 									if (condValue >= varValue) {
 										pass = false;
 									}
 								}
+								else if (operator === '<') {
+									if (condValue <= varValue) {
+										pass = false;
+									}
+								}
 								else if (operator === '>=') {
-									if (condValue < varValue) {
+									if (condValue > varValue) {
 										pass = false;
 									}
 								}
 								else if (operator === '<=') {
-									if (condValue > varValue) {
+									if (condValue < varValue) {
 										pass = false;
 									}
 								}
