@@ -36,6 +36,7 @@
 		- inactiveChoiceFrame - 
 		- inactiveItemFrame   - 
 		- defaultPrompt       - 
+		- uuid                - 
 
 		*/
 		convoLaunch: function(settings) {
@@ -73,6 +74,7 @@
 					mine: {},
 					all: {},
 				},
+				saveState: false,
 				getElement: function(id) {return CTE.getElement(this, id);},
 				fetchElements: function(ids) {return CTE.fetchElements(this, ids);},
 				actOnElement: function(id) {return CTE.actOnElement(this, id);},
@@ -85,6 +87,7 @@
 				queueLength: function() {return CTE.queueLength(this);},
 				getVariableValue: function(varName) {return CTE.getVariableValue(this, varName);},
 				setVariableValue: function(varName, value) {return CTE.setVariableValue(this, varName, value);},
+				rebuildCss: function() {return CTE.rebuildCss(this);},
 			};
 			['variables', 'functions'].forEach(function(item, index) {
 				self[item] = settings[item] || {};
@@ -93,6 +96,16 @@
 				self[item] = settings[item] || null;
 			});
 			self.defaultPrompt = settings.defaultPrompt ?? '...';
+
+			if (settings.uuid && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(settings.uuid)) {
+				// ##### TODO: Throw an error if we were passed a UUID, but it's not valid?
+				self.uuid = settings.uuid;
+				self.userUuid = localStorage.getItem(self.uuid);
+				if (self.userUuid === null) {
+					self.userUuid = crypto.randomUUID();
+					localStorage.setItem(self.userUuid);
+				}
+			}
 
 			// If we were passed pre-cooked elements, store those
 			if (settings.elements) {
@@ -103,7 +116,7 @@
 			}
 
 			// Determine what IDs we still need to pull, and pull them
-			CTE.fetchElements(self, settings.queue);
+			self.fetchElements(settings.queue);
 
 			// Updates to our div
 			div.data('convoTreeEngine-name', settings.name);
@@ -195,6 +208,13 @@
 
 		// Given our object and an ID or namecat, act on the corresponding element
 		actOnElement: function(self, ident) {
+			if (self.saveState === true) {
+				self.saveState === false;
+				if (self.uuid) {
+					// ##### TODO: send a request to safe the state of the CTE object
+				}
+			}
+
 			let action;
 			if (!self.elements.by_id[ident] && !self.elements.by_namecat[ident]) {
 				/* Note that there is the potential here for a situation where we have a request for
@@ -243,6 +263,8 @@
 			if (idents.length === 0) {
 				return;
 			}
+
+			self.saveState = true;
 
 			if (self.queue.current.length) {
 				// If there are already things in the queue, make a nested list to process through
@@ -297,6 +319,8 @@
 				}
 			}
 
+			self.saveState = true;
+
 			return;
 		},
 
@@ -306,6 +330,9 @@
 				nested_in: null,
 				current: [],
 			};
+
+			self.saveState = true;
+
 			return;
 		},
 
@@ -374,6 +401,8 @@
 			/* Given the name of a variable and a value, set the variable of that name to the specified
 			   value. If the value appears to contain an operator, instead act on that operator as
 			   expected and set the variable to the result */
+			self.saveState = true;
+
 			if (typeof value === 'number') {
 				value = String(value);
 			}
@@ -423,6 +452,32 @@
 				// If the value is a string
 				self.variables[varName] = value;
 			}
+		},
+
+		rebuildCss: function(self) {
+			/* Rebuild CSS for the cte object */
+			let styleText = [];
+
+			for (let [key, value] of Object.entries(self.style.mine)) {
+				let cssKeys = key.split(',');
+				for (var i = 0; i < cssKeys.length; i++) {
+					cssKeys[i].trim();
+					cssKeys[i] = 'div.convoTreeEngine-container-' + self.name + ' ' + cssKeys[i];
+				}
+				key = cssKeys.join(', ');
+				styleText.push(key + ' { ' + value + ' }');
+			}
+
+			for (let [key, value] of Object.entries(self.style.all)) {
+				styleText.push(key + ' { ' + value + ' }');
+			}
+
+			styleText = styleText.join(" ");
+			self.style.sheet.replaceSync(styleText);
+
+			self.saveState = true;
+
+			return styleText;
 		},
 
 		elementTypes: {
@@ -703,7 +758,7 @@
 				}
 
 				setTimeout(function() {
-					CTE.utils.rebuildCss(self);
+					self.rebuildCss();
 					self.actOnNextElement();
 				}, delay);
 			},
@@ -1104,28 +1159,6 @@
 				}
 
 				return false;
-			},
-			rebuildCss: function(self) {
-				let styleText = [];
-
-				for (let [key, value] of Object.entries(self.style.mine)) {
-					let cssKeys = key.split(',');
-					for (var i = 0; i < cssKeys.length; i++) {
-						cssKeys[i].trim();
-						cssKeys[i] = 'div.convoTreeEngine-container-' + self.name + ' ' + cssKeys[i];
-					}
-					key = cssKeys.join(', ');
-					styleText.push(key + ' { ' + value + ' }');
-				}
-
-				for (let [key, value] of Object.entries(self.style.all)) {
-					styleText.push(key + ' { ' + value + ' }');
-				}
-
-				styleText = styleText.join(" ");
-				self.style.sheet.replaceSync(styleText);
-
-				return styleText;
 			},
 		},
 
