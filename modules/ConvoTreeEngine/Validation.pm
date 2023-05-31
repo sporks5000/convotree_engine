@@ -398,6 +398,7 @@ my %validations = (
 	positiveInt      => '^[1-9][0-9]*\z', # Looks like a positive integer
 	nonNegInt        => '^[0-9]+\z', # Looks like a non-negative integer
 	number           => '^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z', # Looks like a number
+	uuid             => '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z',
 	namecat          => $namecat,
 	elementList      => $elementList,
 	itemTextNested   => $itemTextNested,

@@ -231,6 +231,21 @@ sub createTables {
 				ENGINE=InnoDB;
 			/);
 		}
+
+		unless ($tableHash{"${prefix}state_data"}) {
+			### A table for user state data
+			$class->doQuery(qq/
+				CREATE TABLE IF NOT EXISTS ${prefix}state_data (
+					id BIGINT AUTO_INCREMENT PRIMARY KEY,
+					app_uuid VARCHAR(36) NOT NULL,
+					user_uuid VARCHAR(36) NOT NULL,
+					data JSON NOT NULL,
+					UNIQUE ${prefix}state_data_uuids
+						(app_uuid, user_uuid)
+				)
+				ENGINE=InnoDB;
+			/);
+		}
 	});
 
 	return;
@@ -241,6 +256,7 @@ sub destroyTables {
 
 	my $prefix = $ConvoTreeEngine::Config::tablePrefix;
 
+	$class->doQuery(qq/DROP TABLE IF EXISTS ${prefix}state_data;/);
 	$class->doQuery(qq/DROP TABLE IF EXISTS ${prefix}nested_element;/);
 	$class->doQuery(qq/DROP TABLE IF EXISTS ${prefix}element;/);
 	$class->doQuery(qq/DROP TABLE IF EXISTS ${prefix}c_element_types;/);

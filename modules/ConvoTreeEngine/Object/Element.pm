@@ -93,7 +93,6 @@ sub create {
 
 	$invocant->_confirm_namecat($args);
 
-	my $table = $invocant->_table;
 	my $self;
 	$invocant->atomic(sub {
 		$self = $invocant->SUPER::create($args);

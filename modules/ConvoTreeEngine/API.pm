@@ -9,6 +9,7 @@ use ConvoTreeEngine::Config;
 use ConvoTreeEngine::Exceptions;
 use ConvoTreeEngine::Validation;
 use ConvoTreeEngine::Object::Element;
+use ConvoTreeEngine::Object::StateData;
 
 =head2 api
 
@@ -36,6 +37,14 @@ sub api {
 			my $ids = $body->{id} || $body->{ids};
 			my $elements = ConvoTreeEngine::Object::Element->searchWithNested_hashRefs($ids);
 			$response = $elements;
+		}
+		elsif ($uri =~ m@/stateData/get/?$@i) {
+			my $stateData = ConvoTreeEngine::Object::StateData->findOrDie($body);
+			$response = $stateData->asHashRef;
+		}
+		elsif ($uri =~ m@/stateData/set/?$@i) {
+			my $stateData = ConvoTreeEngine::Object::StateData->createOrUpdate($body);
+			$response = $stateData->asHashRef;
 		}
 
 		if (!$response && $ConvoTreeEngine::Config::modification_over_api) {

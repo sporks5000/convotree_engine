@@ -88,6 +88,7 @@
 				getVariableValue: function(varName) {return CTE.getVariableValue(this, varName);},
 				setVariableValue: function(varName, value) {return CTE.setVariableValue(this, varName, value);},
 				rebuildCss: function() {return CTE.rebuildCss(this);},
+				saveStateData: function() {return CTE.saveStateData(this);},
 			};
 			['variables', 'functions'].forEach(function(item, index) {
 				self[item] = settings[item] || {};
@@ -209,10 +210,7 @@
 		// Given our object and an ID or namecat, act on the corresponding element
 		actOnElement: function(self, ident) {
 			if (self.saveState === true) {
-				self.saveState === false;
-				if (self.uuid) {
-					// ##### TODO: send a request to safe the state of the CTE object
-				}
+				self.saveStateData();
 			}
 
 			let action;
@@ -244,6 +242,9 @@
 				const ident = self.queue.current.shift();
 				return self.actOnElement(ident);
 			}
+
+			// If we've run out of elements, save the state data
+			self.saveStateData();
 		},
 
 		addToQueue: function(self, idents) {
@@ -478,6 +479,13 @@
 			self.saveState = true;
 
 			return styleText;
+		},
+
+		saveStateData: function(self) {
+			self.saveState === false;
+			if (self.uuid) {
+				// ##### TODO: send a request to save the state of the CTE object
+			}
 		},
 
 		elementTypes: {

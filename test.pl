@@ -20,6 +20,7 @@ use ConvoTreeEngine::Mysql;
 use ConvoTreeEngine::Validation;
 use ConvoTreeEngine::Object::Element;
 use ConvoTreeEngine::Object::Element::Nested;
+use ConvoTreeEngine::Object::StateData;
 
 ### Initialize a connection and then remove the test tables if they exist
 my $dbHandler = ConvoTreeEngine::Mysql->getConnection;
