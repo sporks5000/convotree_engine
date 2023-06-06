@@ -437,11 +437,11 @@ an array of strings indicating validators for what can be present.
 		arbit => [0, 'ignore'],
 	},
 	raw      => {
-		html   => [1, 'string'],
-		delay  => [0, 'nonNegInt'],
-		prompt => [0, 'boolean'],
-		stop   => [0, 'boolean'],
-		arbit  => [0, 'ignore'],
+		html     => [1, 'string'],
+		function => [0, 'word'],
+		delay    => [0, 'nonNegInt'],
+		prompt   => [0, 'boolean'],
+		arbit    => [0, 'ignore'],
 	},
 	enter    => {
 		start => [1, 'string'],

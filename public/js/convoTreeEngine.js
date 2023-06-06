@@ -37,6 +37,7 @@
 		- inactiveItemFrame   - 
 		- defaultPrompt       - 
 		- uuid                - 
+		- deferred            - 
 
 		*/
 		convoLaunch: function(settings) {
@@ -89,6 +90,7 @@
 				setVariableValue: function(varName, value) {return CTE.setVariableValue(this, varName, value);},
 				rebuildCss: function() {return CTE.rebuildCss(this);},
 				saveStateData: function() {return CTE.saveStateData(this);},
+				reset: function(args) {return CTE.reset(this, args);},
 			};
 			['variables', 'functions'].forEach(function(item, index) {
 				self[item] = settings[item] || {};
@@ -116,12 +118,16 @@
 				});
 			}
 
-			// Determine what IDs we still need to pull, and pull them
-			self.fetchElements(settings.queue);
-
 			// Updates to our div
 			div.data('convoTreeEngine-name', settings.name);
 			div.addClass('convoTreeEngine-container convoTreeEngine-container-' + settings.name);
+
+			// Determine what IDs we still need to pull, and pull them
+			self.fetchElements(settings.queue).done(function(data) {
+				if (settings.deferred != true) {
+					self.actOnNextElement();
+				}
+			});
 
 			return self;
 		},
@@ -488,6 +494,53 @@
 			}
 		},
 
+		reset: function(self, args) {
+			args ||= {
+				elements: true,
+				style: true,
+				variables: true,
+				queue: true,
+				seen: true,
+				display: true,
+			};
+
+			if (args.elements == true) {
+				let seen = self.elements.seen;
+				self.elements = {
+					by_id: {},
+					by_namecat: {},
+					seen: seen,
+					pulled: {},
+				}
+			}
+
+			if (args.style == true) {
+				let sheet = self.style.sheet;
+				self.style = {
+					sheet: sheet,
+					mine: {},
+					all: {},
+				},
+				self.rebuildCss();
+			}
+
+			if (args.variables == true) {
+				self.variables == {};
+			}
+
+			if (args.queue == true) {
+				self.dropQueue();
+			}
+
+			if (args.seen == true) {
+				self.elements.seen = {};
+			}
+
+			if (args.display == true) {
+				self.div.empty();
+			}
+		},
+
 		elementTypes: {
 			variable: function(self, element) {
 				for (let [key, value] of Object.entries(element.json.update)) {
@@ -577,7 +630,7 @@
 				}
 				htmlDiv.append(htmlSpan);
 
-				// If we're in anythin other than an item , process against the function (if any), and
+				// If we're in anything other than an item , process against the function (if any), and
 				// then return the htmlDiv. We ignore both 'delay' and 'prompt'.
 				if (additionalArgs.type !== 'item') {
 					if (funcName !== null) {
@@ -603,6 +656,57 @@
 								htmlDiv: htmlDiv,
 								element: element,
 								active: additionalArgs.active,
+							});
+						}
+					}
+
+					self.div.append(htmlDiv);
+					self.markElementSeen(element);
+
+					if (prompt == false || prompt === "0" || self.queueLength() === 0) {
+						// If we're not prompting, go straight to the next element in the queue.
+						// If there are no elements in the queue (regardless of whether we would
+						// typically prompt), reach the end.
+						return self.actOnNextElement();
+					}
+					else if (prompt == true) {
+						prompt = self.defaultPrompt;
+					}
+
+					// Make a false choice element to display as the prompt
+					CTE.elementTypes.choice(self, {
+						json: {
+							choices: [
+								{
+									cond: null,
+									text: prompt,
+								},
+							],
+							keep: 0,
+							delay: 0,
+						}
+					});
+				}, delay);
+			},
+			raw: function(self, element) {
+				let delay = element.json.delay ?? 500;
+				delay = Number(delay);
+				let prompt = element.json.prompt ?? true;
+				const funcName = element.json.function ?? null;
+
+				// Create the div that will contain the item text
+				let htmlDiv = $('<div>');
+				htmlDiv.html(element.json.html);
+
+				setTimeout(function() {
+					// If there is a function, we want to process it right before we display rather
+					// than before we start the delay.
+					if (funcName !== null) {
+						if (self.functions[funcName]) {
+							htmlDiv = self.functions[funcName]({
+								self: self,
+								htmlDiv: htmlDiv,
+								element: element,
 							});
 						}
 					}
@@ -798,6 +902,7 @@
 				self.actOnNextElement();
 			},
 			do: function(self, element) {
+				let stop = element.json.stop ?? false;
 				let delay = element.json.delay ?? 500;
 				delay = Number(delay);
 
@@ -810,7 +915,7 @@
 						});
 					}
 
-					if (!'stop' in element.json || element.json.stop == false) {
+					if (stop == false) {
 						self.actOnNextElement();
 					}
 				}, delay);

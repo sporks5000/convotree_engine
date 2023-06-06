@@ -115,11 +115,11 @@ $examples{note} = {
 =cut
 
 $examples{raw} = {
-	html   => 'A string that will be interpreted as HTML and displayed to the user',
-	delay  => 500,
-	prompt => JSON::false,
-	stop   => JSON::false,
-	arbit  => {
+	html     => 'A string that will be interpreted as HTML and displayed to the user',
+	delay    => 500,
+	prompt   => JSON::false,
+	function => 'functionName',
+	arbit    => {
 		"Additional details" => {
 			"1" => 'The "arbit" key is optional. It may contain arbitrary data in the form of a JSON object, JSON array, or any other acceptable JSON data type',
 			"2" => 'The "delay" key is optional. It contains a value in milliseconds for how long to pause before processing additional elements',
