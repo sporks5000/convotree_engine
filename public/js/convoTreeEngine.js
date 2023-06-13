@@ -688,7 +688,7 @@
 								let varValue = self.getVariableValue(varName) ?? 0;
 								if (/[<>]|==/.test(operator)) {
 									// If the operator indicates that both should be a number...
-									if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(condValue) || /^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(varValue)) {
+									if (CTE.regex.number.test(condValue) || CTE.regex.number.test(varValue)) {
 										// ...and they both look like a number, make sure they're stored as numbers
 										condValue = Number(condValue);
 										varValue = Number(varValue);
@@ -699,7 +699,7 @@
 										varValue = false;
 									}
 								}
-								else if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(condValue) && /^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(varValue)) {
+								else if (CTE.regex.number.test(condValue) && CTE.regex.number.test(varValue)) {
 									// If both the variable value and the condition value look like numbers, make them numbers
 									condValue = Number(condValue);
 									varValue = Number(varValue);
@@ -794,6 +794,12 @@
 				});
 			},
 		},
+
+		regex: {
+			uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+			number: /^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/,
+			updateNumber: /^[+*\/-]=\s?(-?[1-9][0-9]*|0)(\.[0-9]+)?$/, // Like '+=3'
+		},
 	};
 
 	class ConvoTree {
@@ -863,7 +869,7 @@
 
 			self.defaultPrompt = settings.defaultPrompt ?? '...';
 
-			if (settings.uuid && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(settings.uuid)) {
+			if (settings.uuid && CTE.regex.uuid.test(settings.uuid)) {
 				// ##### TODO: Throw an error if we were passed a UUID, but it's not valid?
 				self.uuid = settings.uuid;
 				self.userUuid = localStorage.getItem(self.uuid);
@@ -1155,7 +1161,7 @@
 			self.elements.seen[element.namecat] = true;
 		}
 
-		/* Return the number of elements currently present before ending the queue */
+		/* Return the number of elements currently present before the end of the queue */
 		queueLength() {
 			let self = this;
 
@@ -1197,11 +1203,11 @@
 				return;
 			}
 
-			if (/^[+*\/-]=\s?(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(value)) {
+			if (CTE.regex.updateNumber.test(value)) {
 				// If the value indicates that we're updating a numerical value. I.E. "+=3"
 				let current = self.getVariableValue(varName) ?? 0;
 				if (typeof current === 'string') {
-					if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(current)) {
+					if (CTE.regex.number.test(current)) {
 						current = Number(current);
 					}
 					else {
@@ -1229,7 +1235,7 @@
 
 				self.variables[varName] = current;
 			}
-			else if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(value)) {
+			else if (CTE.regex.number.test(value)) {
 				// If the value is just a number
 				self.variables[varName] = Number(value);
 			}
