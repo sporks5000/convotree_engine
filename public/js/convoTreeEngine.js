@@ -39,11 +39,14 @@
 
 				// Always go straight into the next element from this element type
 				self.actOnNextElement();
+
+				return $.Deferred().resolve();
 			},
 			note: function(self, element) {
-				return;
 				// Always go straight into the next element from this element type
 				self.actOnNextElement();
+
+				return $.Deferred().resolve();
 			},
 			elements: function(self, element) {
 				if (element.json.drop == true) {
@@ -60,6 +63,8 @@
 				}
 				// Always go straight into the next element from this element type
 				self.actOnNextElement();
+
+				return $.Deferred().resolve();
 			},
 			item: function(self, element, additionalArgs) {
 				additionalArgs ||= {};
@@ -120,7 +125,7 @@
 				}
 				htmlDiv.append(htmlSpan);
 
-				// If we're in anything other than an item , process against the function (if any), and
+				// If we're in anything other than an item, process against the function (if any), and
 				// then return the htmlDiv. We ignore both 'delay' and 'prompt'.
 				if (additionalArgs.type !== 'item') {
 					if (funcName !== null) {
@@ -136,7 +141,7 @@
 					return htmlDiv;
 				}
 
-				setTimeout(function() {
+				return CTE.utils.wait(function() {
 					// If there is a function, we want to process it right before we display rather
 					// than before we start the delay.
 					if (funcName !== null) {
@@ -157,7 +162,8 @@
 						// If we're not prompting, go straight to the next element in the queue.
 						// If there are no elements in the queue (regardless of whether we would
 						// typically prompt), reach the end.
-						return self.actOnNextElement();
+						self.actOnNextElement();
+						return $.Deferred().resolve();
 					}
 					else if (prompt == true) {
 						prompt = self.defaultPrompt;
@@ -188,7 +194,7 @@
 				let htmlDiv = $('<div>');
 				htmlDiv.html(element.json.html);
 
-				setTimeout(function() {
+				return CTE.utils.wait(function() {
 					// If there is a function, we want to process it right before we display rather
 					// than before we start the delay.
 					if (funcName !== null) {
@@ -208,7 +214,8 @@
 						// If we're not prompting, go straight to the next element in the queue.
 						// If there are no elements in the queue (regardless of whether we would
 						// typically prompt), reach the end.
-						return self.actOnNextElement();
+						self.actOnNextElement();
+						return $.Deferred().resolve();
 					}
 					else if (prompt == true) {
 						prompt = self.defaultPrompt;
@@ -242,6 +249,8 @@
 				};
 
 				self.actOnNextElement();
+
+				return $.Deferred().resolve();
 			},
 			choice: function(self, element) {
 				let needed = [];
@@ -269,6 +278,7 @@
 					}
 				});
 
+				let wait = $.Deferred();
 				fetch.done(function() {
 					let choicesDiv = $('<div>').addClass('convoTreeEngine-choices-group');
 					if ('classes' in element.json) {
@@ -292,7 +302,7 @@
 						if (!choice.element) {
 							// We've requested the elements that were listed. If it's not here now, then there's something wrong.
 							// ##### TODO: Error of some kind
-							return;
+							return wait.resolve();
 						}
 						if (choice.active == true || choice.data.display_inactive == true) {
 							let choiceDiv = CTE.elementTypes.item(self, choice.element, {type: 'choice', active: choice.active});
@@ -320,11 +330,15 @@
 					let keep = element.json.keep ?? 1;
 					keep = Number(keep);
 
+					// ##### TODO: I am not convinced that this will do the right thing
 					setTimeout(function() {
 						CTE.listeners.choices(self, choicesDiv, keep);
 						self.div.append(choicesDiv);
+						wait.resolve();
 					}, delay);
 				});
+
+				return wait;
 			},
 			display: function(self, element) {
 				let delay = element.json.delay ?? 500;
@@ -359,7 +373,7 @@
 					}
 				}
 
-				setTimeout(function() {
+				return CTE.utils.wait(function() {
 					self.rebuildCss();
 					self.actOnNextElement();
 				}, delay);
@@ -377,7 +391,8 @@
 				}
 
 				if (paths === null || paths.length === 0) {
-					return self.actOnNextElement();
+					self.actOnNextElement();
+					return $.Deferred().resolve();
 				}
 
 				let pathWeight = [];
@@ -390,13 +405,15 @@
 
 				self.addToQueue(pathWeight[result]);
 				self.actOnNextElement();
+
+				return $.Deferred().resolve();
 			},
 			do: function(self, element) {
 				let stop = element.json.stop ?? false;
 				let delay = element.json.delay ?? 500;
 				delay = Number(delay);
 
-				setTimeout(function() {
+				return CTE.utils.wait(function() {
 					const funcName = element.json.function ?? null;
 					if (funcName !== null && self.functions[funcName]) {
 						self.functions[funcName]({
@@ -763,6 +780,15 @@
 
 				return false;
 			},
+			wait: function(func, delay) {
+				let wait = $.Deferred();
+				setTimeout(function() {
+					func();
+					wait.resolve();
+				}, delay);
+
+				return wait;
+			},
 		},
 
 		listeners: {
@@ -820,6 +846,8 @@
 		- defaultPrompt       -
 		- uuid                -
 		- deferred            -
+		- beforeElement       -
+		- afterElement        -
 
 		*/
 		constructor(settings) {
@@ -859,6 +887,9 @@
 				all: {},
 			};
 			self.saveState = false;
+
+			self.beforeElement = settings.beforeElement;
+			self.afterElement = settings.afterElement;
 
 			self.variables = settings.variables || {};
 			self.functions = settings.functions || {};
@@ -1000,7 +1031,15 @@
 					// ##### TODO: Should we throw some kind of error if the element does exist even after we called for it?
 					return;
 				}
-				CTE.elementTypes[element.type](self, element);
+
+				if (self.beforeElement) {
+					self.beforeElement(self, element);
+				}
+				CTE.elementTypes[element.type](self, element).done(function() {
+					if (self.afterElement) {
+						self.afterElement(self, element);
+					}
+				});
 			});
 		}
 
