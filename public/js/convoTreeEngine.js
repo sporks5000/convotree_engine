@@ -800,29 +800,29 @@
 		/* Given a div element, initiate a convoTreeEngine instance
 
 		Arguments:
-		- queue               - 
-		- div                 - 
-		- name                - 
-		- api_url             - 
-		- elements            - 
-		- variables           - 
-		- functions           - 
-		- activeChoiceFrame   - 
-		- activeItemFrame     - 
-		- inactiveChoiceFrame - 
-		- inactiveItemFrame   - 
-		- defaultPrompt       - 
-		- uuid                - 
-		- deferred            - 
+		- queue               -
+		- div                 -
+		- name                -
+		- api_url             -
+		- elements            -
+		- variables           -
+		- functions           -
+		- activeChoiceFrame   -
+		- activeItemFrame     -
+		- inactiveChoiceFrame -
+		- inactiveItemFrame   -
+		- defaultPrompt       -
+		- uuid                -
+		- deferred            -
 
 		*/
-		constructor(settings) {	
+		constructor(settings) {
 			// ##### TODO: Make sure that the name is present and acceptable to be part of a class name
-	
+
 			// Put our stylesheet in place
 			const ss = new CSSStyleSheet;
 			document.adoptedStyleSheets.unshift(ss);
-	
+
 			if (settings.queue && !Array.isArray(settings.queue)) {
 				settings.queue = [settings.queue];
 			}
@@ -862,7 +862,7 @@
 			self.inactiveItemFrame = settings.inactiveItemFrame || null;
 
 			self.defaultPrompt = settings.defaultPrompt ?? '...';
-	
+
 			if (settings.uuid && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(settings.uuid)) {
 				// ##### TODO: Throw an error if we were passed a UUID, but it's not valid?
 				self.uuid = settings.uuid;
@@ -872,7 +872,7 @@
 					localStorage.setItem(self.userUuid);
 				}
 			}
-	
+
 			// If we were passed pre-cooked elements, store those
 			if (settings.elements) {
 				settings.elements.forEach(function(item, index) {
@@ -888,33 +888,33 @@
 				}
 			});
 		}
-	
+
 		/* A note on how the queue works:
-	
 			The queue is an object containing two keys: "nested_in" and "current". "Current" is
 			an array containing either element IDs or namecats. We act on these elements one at
 			a time until we reach the end of the array; as we act on the elements we remove them
 			from the array. Some elements will add additional element IDs or namecats to the
 			array. When we reach the end of the array, if "nested_in" is populated, we replace
 			self.queue with self.queue.nested_in, and continue processing from there.
-	
+
 			If an elements attempts to add IDs to the "current" array, but that array already
 			has at least one ID in it, it will instead nest itself - the opposite of what is
 			described above. */
-	
+
 		/* Given our object and an ID or array of IDs, query for the ones needed. Ensure that a
 			resolved jquery deferred object is always returned so that we can act off of it if
 			necessary. */
 		fetchElements(idents) {
 			let self = this;
+
 			if (typeof idents === 'undefined' || idents === null) {
 				return $.Deferred().resolve();
 			}
-	
+
 			if (!Array.isArray(idents)) {
 				idents = [idents];
 			}
-	
+
 			let needed = []
 			let requested = {};
 			idents.forEach(function(ident, index) {
@@ -927,7 +927,7 @@
 					requested[ident] = true;
 				}
 			});
-	
+
 			if (needed.length) {
 				return CTE.call_api(self.api_url, 'element/get', {ids: needed}).done(function(data) {
 					for (const [key, value] of Object.entries(data.response)) {
@@ -940,7 +940,7 @@
 							self.elements.pulled[value.namecat] = true;
 						}
 					}
-	
+
 					Object.keys(requested).forEach(function(key) {
 						if (self.elements.pulled[key] !== true) {
 							console.log('Requested element "' + key + '" but it was not returned');
@@ -948,13 +948,14 @@
 					});
 				});
 			}
-	
+
 			return $.Deferred().resolve();
 		}
-	
-		// Return the object containing element data. Return nothing if it's not in our data
+
+		/* Return the object containing element data. Return nothing if it's not in our data */
 		getElement(ident) {
 			let self = this;
+
 			let element;
 			if (self.elements.by_id[ident]) {
 				element = self.elements.by_id[ident];
@@ -965,18 +966,19 @@
 			else {
 				return;
 			}
-	
+
 			// Return a deep copy of the element
 			return JSON.parse(JSON.stringify(element));
 		}
-	
-		// Given our object and an ID or namecat, act on the corresponding element
+
+		/* Given our object and an ID or namecat, act on the corresponding element */
 		actOnElement(ident) {
 			let self = this;
+
 			if (self.saveState === true) {
 				self.saveStateData();
 			}
-	
+
 			let action;
 			if (!self.elements.by_id[ident] && !self.elements.by_namecat[ident]) {
 				/* Note that there is the potential here for a situation where we have a request for
@@ -985,7 +987,7 @@
 				action = self.fetchElements(ident);
 			}
 			action ||= $.Deferred().resolve();
-	
+
 			return action.done(function() {
 				const element = self.getElement(ident);
 				if (!element) {
@@ -995,32 +997,34 @@
 				CTE.elementTypes[element.type](self, element);
 			});
 		}
-	
+
+		/* Get the next element from the queue, then act on that element */
 		actOnNextElement() {
 			let self = this;
-			/* Get the next element from the queue, then act on that element */
+
 			while (self.queue.nested_in && !self.queue.current.length) {
 				self.queue = self.queue.nested_in;
 			}
-	
+
 			if (self.queue.current.length) {
 				const ident = self.queue.current.shift();
 				return self.actOnElement(ident);
 			}
-	
+
 			// If we've run out of elements, save the state data
 			self.saveStateData();
 		}
-	
+
+		/* Given an element identifier or an array of element identifiers, add them to the
+			queue of elements to be visited. */
+		/* Note: One of the design decisions of this project was giving control to the
+			creator over when element data is pulled from the backend. While some steps of
+			that have been added automatically in other places to ensure that there was no
+			interruption of flow, it was decided that adding additional pieces of it within
+			the "addToQueue" function was not necessary. */
 		addToQueue(idents) {
 			let self = this;
-			/* Given an element identifier or an array of element identifiers, add them to the
-				queue of elements to be visited. */
-			/* Note: One of the design decisions of this project was giving control to the
-				creator over when element data is pulled from the backend. While some steps of
-				that have been added automatically in other places to ensure that there was no
-				interruption of flow, it was decided that adding additional pieces of it within
-				the "addToQueue" function was not necessary. */
+
 			if (typeof idents === 'undefined' || idents === null) {
 				return;
 			}
@@ -1030,9 +1034,9 @@
 			if (idents.length === 0) {
 				return;
 			}
-	
+
 			self.saveState = true;
-	
+
 			if (self.queue.current.length) {
 				// If there are already things in the queue, make a nested list to process through
 				// before returning to the list that's currently present.
@@ -1043,19 +1047,20 @@
 				};
 				return;
 			}
-	
+
 			self.queue.current = idents;
 		}
-	
+
+		/* Given one or more element identifiers, skip ahead in the queue until one of them is
+			the next item in the queue (or the end is reached) */
 		skipTo(idents) {
 			let self = this;
-			/* Given one or more element identifiers, skip ahead in the queue until one of them is
-				the next item in the queue (or the end is reached) */
+
 			if (typeof idents === 'undefined' || idents === null) {
 				// ##### TODO: Is this the correct behavior here?
 				return;
 			}
-	
+
 			let skipTos = {};
 			if (Array.isArray(idents)) {
 				idents.forEach(function(ident, index) {
@@ -1065,17 +1070,17 @@
 			else {
 				skipTos[idents] = true;
 			}
-	
+
 			outerLoop:
 			while (true) {
 				while (self.queue.nested_in && !self.queue.current.length) {
 					self.queue = self.queue.nested_in;
 				}
-	
+
 				if (!self.queue.nested_in && !self.queue.current.length) {
 					break outerLoop;
 				}
-	
+
 				innerLoop:
 				while (self.queue.current.length) {
 					const ident = self.queue.current[0];
@@ -1086,29 +1091,31 @@
 					self.queue.current.shift();
 				}
 			}
-	
+
 			self.saveState = true;
-	
+
 			return;
 		}
-	
+
+		/* Drop the entirety of the queue */
 		dropQueue() {
 			let self = this;
-			/* Drop the entirety of the queue */
+
 			self.queue = {
 				nested_in: null,
 				current: [],
 			};
-	
+
 			self.saveState = true;
-	
+
 			return;
 		}
-	
+
+		/* Given an element or an element identiiyer, determine if that element is in the
+			list of elements seen by the user */
 		hasSeenElement(ident) {
 			let self = this;
-			/* Given an element or an element identiiyer, determine if that element is in the
-				list of elements seen by the user */
+
 			if (typeof ident === 'object') {
 				// If we were passed an element data structure, use the ID from it
 				ident = ident.id;
@@ -1118,17 +1125,18 @@
 			}
 			return false;
 		}
-	
+
+		/* Given an element or an element identifier, mark that element as having been seen by
+			the user. Alternatively, if a third argument of "true" is passed, remove the
+			indicator that the element has been seen.*/
 		markElementSeen(element, unsee) {
 			let self = this;
-			/* Given an element or an element identifier, mark that element as having been seen by
-				the user. Alternatively, if a third argument of "true" is passed, remove the
-				indicator that the element has been seen.*/
+
 			unsee ??= false;
 			if (typeof element === 'undefined' || element === null) {
 				return;
 			}
-	
+
 			if (typeof element !== 'object') {
 				// If we were passed an ID or a namecat, get the actual element data structure
 				element = self.getElement(element);
@@ -1136,47 +1144,50 @@
 					return;
 				}
 			}
-	
+
 			if (unsee == true) {
 				delete self.elements.seen[element.id];
 				delete self.elements.seen[element.namecat];
 				return;
 			}
-	
+
 			self.elements.seen[element.id] = true;
 			self.elements.seen[element.namecat] = true;
 		}
-	
+
+		/* Return the number of elements currently present before ending the queue */
 		queueLength() {
 			let self = this;
-			/* Return the number of elements currently present before ending the queue */
+
 			let qLength = self.queue.current.length;
 			let current = self.queue;
 			while(current.nested_in !== null) {
 				current = current.nested_in;
 				qLength += current.current.length;
 			}
-	
+
 			return qLength;
 		}
-	
+
+		/* Given the name of a variable, return its value (if any) */
 		getVariableValue(varName) {
 			let self = this;
-			/* Given the name of a variable, return its value (if any) */
+
 			if (!varName in self.variables) {
 				return null;
 			}
-	
+
 			return self.variables[varName];
 		}
-	
+
+		/* Given the name of a variable and a value, set the variable of that name to the specified
+			value. If the value appears to contain an operator, instead act on that operator as
+			expected and set the variable to the result */
 		setVariableValue(varName, value) {
 			let self = this;
-			/* Given the name of a variable and a value, set the variable of that name to the specified
-				value. If the value appears to contain an operator, instead act on that operator as
-				expected and set the variable to the result */
+
 			self.saveState = true;
-	
+
 			if (typeof value === 'number') {
 				value = String(value);
 			}
@@ -1185,7 +1196,7 @@
 				delete self.variables[varName];
 				return;
 			}
-	
+
 			if (/^[+*\/-]=\s?(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(value)) {
 				// If the value indicates that we're updating a numerical value. I.E. "+=3"
 				let current = self.getVariableValue(varName) ?? 0;
@@ -1199,10 +1210,10 @@
 						return;
 					}
 				}
-	
+
 				const operator = value.substring(0,2);
 				const number = Number(value.substring(2).trim());
-	
+
 				if (operator === '+=') {
 					current += number;
 				}
@@ -1215,7 +1226,7 @@
 				else if (operator === '/=') {
 					current /= number;
 				}
-	
+
 				self.variables[varName] = current;
 			}
 			else if (/^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/.test(value)) {
@@ -1227,12 +1238,13 @@
 				self.variables[varName] = value;
 			}
 		}
-	
+
+		/* Rebuild CSS for the cte object */
 		rebuildCss() {
 			let self = this;
-			/* Rebuild CSS for the cte object */
+
 			let styleText = [];
-	
+
 			for (let [key, value] of Object.entries(self.style.mine)) {
 				let cssKeys = key.split(',');
 				for (var i = 0; i < cssKeys.length; i++) {
@@ -1242,27 +1254,30 @@
 				key = cssKeys.join(', ');
 				styleText.push(key + ' { ' + value + ' }');
 			}
-	
+
 			for (let [key, value] of Object.entries(self.style.all)) {
 				styleText.push(key + ' { ' + value + ' }');
 			}
-	
+
 			styleText = styleText.join(" ");
 			self.style.sheet.replaceSync(styleText);
-	
+
 			self.saveState = true;
-	
+
 			return styleText;
 		}
-	
+
+		/* ##### TOTO: This */
 		saveStateData() {
 			let self = this;
+
 			self.saveState === false;
 			if (self.uuid) {
 				// ##### TODO: send a request to save the state of the CTE object
 			}
 		}
-	
+
+		/* Reset the some or all of the aspects of the CTE element */
 		reset(args) {
 			let self = this;
 			args ||= {
@@ -1273,7 +1288,7 @@
 				seen: true,
 				display: true,
 			};
-	
+
 			if (args.elements == true) {
 				let seen = self.elements.seen;
 				self.elements = {
@@ -1283,7 +1298,7 @@
 					pulled: {},
 				}
 			}
-	
+
 			if (args.style == true) {
 				let sheet = self.style.sheet;
 				self.style = {
@@ -1293,19 +1308,19 @@
 				},
 				self.rebuildCss();
 			}
-	
+
 			if (args.variables == true) {
 				self.variables == {};
 			}
-	
+
 			if (args.queue == true) {
 				self.dropQueue();
 			}
-	
+
 			if (args.seen == true) {
 				self.elements.seen = {};
 			}
-	
+
 			if (args.display == true) {
 				self.div.empty();
 			}
