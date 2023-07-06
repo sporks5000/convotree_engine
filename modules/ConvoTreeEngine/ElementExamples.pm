@@ -209,6 +209,7 @@ $examples{variable} = {
 		var1 => '1',
 		var2 => 'string',
 		var3 => '+=1',
+		var4 => '+= [var3]',
 	},
 	arbit  => {
 		"Additional details" => {
@@ -218,6 +219,7 @@ $examples{variable} = {
 			"3" => 'If the value begins with "+=", "-=", "*=", or "/=", followed by a number it is assumed that we will be adding to, subtracting from, multiplying by, or dividing from that value',
 			"3.a" => 'If there is no existing value, we assume the value of 0',
 			"3.b" => 'If there is an existing value, but does not appear to be a number, we simply replace that value with the string given',
+			"4" => 'If the value is a variable name in square brackets, set the variable in the key to the value of the variable in the brackets',
 		},
 	},
 };

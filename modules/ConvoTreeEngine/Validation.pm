@@ -300,10 +300,23 @@ my $variableUpdates = sub {
 		### The strings for updating numerical values could be parsed, but if they failed, we'd
 		### just check them against "string" anyway, and they'd pass that, so there's no point.
 		return 0 unless $self->validateValue($value->{$key}, ['string', 'undefined']);
-		if ($value->{$key} =~ m/^[+\*\/-]=/ && !$self->validateValue(substr($value->{$key}, 2), 'number')) {
-			return $self->fail('"VariableUpdate" operator indicates a number, but the value is not a number', $value->{$key});
+		if ($value->{$key} && $value->{$key} =~ m/^[+\*\/-]=\s*(.*)$/) {
+			my $val = $1;
+			if (!$self->validateValue($val, ['number', 'variableRef'])) {
+				return $self->fail('"VariableUpdate" operator indicates a number, but the value is not a number', $value->{$key});
+			}
 		}
 	}
+	return 1;
+};
+my $variableRef = sub {
+	### Returns true if it si a straing containing a variable name encased in any number of square bracket pairs
+	my ($self, $value) = @_;
+	return 0 if ref $value;
+	$value =~ m/^([[]+)\s*(.*)\s*([]]+)$/;
+	return 0 unless length $1;
+	return 0 unless length($1) == length($3);
+	return 0 unless $self->validateValue($2, 'variableName');
 	return 1;
 };
 my $choice = sub {
@@ -390,7 +403,7 @@ my %validations = (
 	boolean          => $boolean,
 	hash             => $hash,
 	array            => $array,
-	variableName     => '^[a-zA-Z0-9_.]+\z', # A pattern we're specifcally using for variable names
+	variableName     => '^[a-zA-Z_][a-zA-Z0-9_.]*\z', # A pattern we're specifcally using for variable names
 	words            => '^(?:[a-zA-Z0-9_]+ ?)+\b\z', # A string of words separated by single spaces
 	dashWords        => '^(?:[a-zA-Z0-9_]+[ -]?)+\b\z', # A string of words separated by either single spaces or single hyphens
 	word             => '^[a-zA-Z0-9_]+\z', # A single word containg letters numbers and/or underscores
@@ -409,6 +422,7 @@ my %validations = (
 	conditionBlock   => $conditionBlock,
 	ifConditionBlock => $ifConditionBlock,
 	variableUpdates  => $variableUpdates,
+	variableRef      => $variableRef,
 	choice           => $choice,
 	randomPath       => $randomPath,
 	arrayOf          => $arrayOf,

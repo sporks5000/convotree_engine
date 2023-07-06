@@ -449,11 +449,11 @@
 			expandHoverTextVariables: function(self, hover) {
 				/* Given a string of text that contains variable names contained within square brackets,
 				   replace each of those varaibles with the value of the variable. */
-				let vars = hover.match(/\[[a-zA-Z0-9_.]+\]/g);
+				let vars = hover.match(/\[[a-zA-Z_][a-zA-Z0-9_.]*\]/g);
 				if (!vars || !vars.length) {
 					return hover;
 				}
-				let chunks = hover.split(/\[[a-zA-Z0-9_.]+\]/);
+				let chunks = hover.split(/\[[a-zA-Z_][a-zA-Z0-9_.]*\]/);
 				let modifiedHover = chunks.shift();
 
 				while (vars.length) {
@@ -488,8 +488,8 @@
 				// Separate out the variables; replace them with placeholders.
 				// Use lookahead to ensure we're not matching "](", because that would indicate an html
 				// link.
-				let vars = text.match(/\[[a-zA-Z0-9_.]+\](?!\()/g);
-				text = text.replace(/\[[a-zA-Z0-9_.]+\](?!\()/g, "\x07")
+				let vars = text.match(/\[[a-zA-Z_][a-zA-Z0-9_.]*\](?!\()/g);
+				text = text.replace(/\[[a-zA-Z_][a-zA-Z0-9_.]*\](?!\()/g, "\x07")
 					.replace(/\x01/g, '[')  // put opening square brackets back (unescaped this time)
 					.replace(/\x02/g, ']'); // put closing square brackets back (unescaped this time)
 
@@ -825,6 +825,7 @@
 			uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
 			number: /^(-?[1-9][0-9]*|0)(\.[0-9]+)?$/,
 			updateNumber: /^[+*\/-]=\s?(-?[1-9][0-9]*|0)(\.[0-9]+)?$/, // Like '+=3'
+			varName: /^[a-zA-Z_][a-zA-Z0-9_.]*$/,
 		},
 	};
 
@@ -1032,11 +1033,11 @@
 					return;
 				}
 
-				if (self.beforeElement) {
+				if (typeof self.beforeElement === 'function') {
 					self.beforeElement(self, element);
 				}
 				CTE.elementTypes[element.type](self, element).done(function() {
-					if (self.afterElement) {
+					if (typeof self.afterElement === 'function') {
 						self.afterElement(self, element);
 					}
 				});
@@ -1231,6 +1232,11 @@
 		setVariableValue(varName, value) {
 			let self = this;
 
+			if (!CTE.regex.varName.test(varName)) {
+				// If the variable name does not match the regex, do nothing
+				return;
+			}
+
 			self.saveState = true;
 
 			if (typeof value === 'number') {
@@ -1242,7 +1248,53 @@
 				return;
 			}
 
-			if (CTE.regex.updateNumber.test(value)) {
+			const checkOp = /^\s*([+*\/-]=)?\s*(.*)\s*$/;
+			let matching = checkOp.exec(value);
+			let operator = matching[1];
+			let val = matching[2];
+
+			if (/^\[.*\]$/.test(val)) {
+				const getVar = /^([[]+)\s*(.*)\s*([]]+)$/;
+				matching = checkOp.exec(val);
+				let o = matching[1];
+				let e = matching[3];
+				let name = matching[2];
+
+				if (/\(.*\)$/.test(name)) {
+					o = o.substring(1);
+					e = e.substring(1);
+					// ##### TODO: It's a function
+				}
+
+				while (o.length && e.length) {
+					o = o.substring(1);
+					e = e.substring(1);
+					if (CTE.regex.varName.test(name)) {
+						name = self.getVariableValue(varName) ?? '';
+						if (typeof name === 'number') {
+							name = String(name);
+						}
+					}
+					else {
+						name = '';
+					}
+				};
+
+				val = o + name + e;
+			}
+			else if (/^'.*'$/.test(val) || /^".*"$/.test(val)) {
+				// If the value is surrounded in quotes, remove those quotes
+				val = val.substring(1, val.length - 1);
+			}
+
+			if (operator !== null) {
+				if (!CTE.regex.number.test(val)) {
+					// If we're performing an operation, and the value is not a number, leave it the same
+					return;
+				}
+
+				val = Number(val);
+
 				// If the value indicates that we're updating a numerical value. I.E. "+=3"
 				let current = self.getVariableValue(varName) ?? 0;
 				if (typeof current === 'string') {
@@ -1250,37 +1302,33 @@
 						current = Number(current);
 					}
 					else {
-						// If the current value has non-numerical characters, then assign as if it's a string
-						self.variables[varName] = value;
+						// If the current value has non-numerical characters, leave it the same
 						return;
 					}
 				}
 
-				const operator = value.substring(0,2);
-				const number = Number(value.substring(2).trim());
-
 				if (operator === '+=') {
-					current += number;
+					current += val;
 				}
 				else if (operator === '-=') {
-					current += number;
+					current += val;
 				}
 				else if (operator === '*=') {
-					current *= number;
+					current *= val;
 				}
 				else if (operator === '/=') {
-					current /= number;
+					current /= val;
 				}
 
 				self.variables[varName] = current;
 			}
-			else if (CTE.regex.number.test(value)) {
+			else if (CTE.regex.number.test(val)) {
 				// If the value is just a number
-				self.variables[varName] = Number(value);
+				self.variables[varName] = Number(val);
 			}
 			else {
 				// If the value is a string
-				self.variables[varName] = value;
+				self.variables[varName] = val;
 			}
 		}
 
