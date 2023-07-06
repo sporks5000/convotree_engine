@@ -166,6 +166,10 @@ $examples{if} = {
 			[1,2],
 			'optional text (not displayed to the user)',
 		],
+		[
+			'var >= [var2]',
+			[1,2],
+		],
 	],
 	arbit => {
 		"Additional details" => {
@@ -178,6 +182,7 @@ $examples{if} = {
 			"4" => 'The conditions within these nested array will be processed in the order given.',
 			"4.a" => 'The first condition to return true will determine that path the narrative takes.',
 			"4.b" => 'further conditions beyond the first the passed as true will be ignored.',
+			"5" => 'If the first item compares to a string contained in square brackets, that will be interpreted as a variable name, and the comparison will be to the value',
 		},
 	},
 };

@@ -245,7 +245,7 @@ my $conditionString = sub {
 		return 0 unless $self->validateValue($cond, 'string');
 		if ($operator =~ m/[<>]|==/) {
 			### If the operator is specific to numbers, make sure that the condition is a number
-			return 0 unless $self->validateValue($cond, 'number');
+			return 0 unless $self->validateValue($cond, ['number', 'variableRef', 'functionCall']);
 		}
 		else {
 			if ($cond =~m/^(['"])(.*)\1\s*\z/) {
@@ -302,7 +302,7 @@ my $variableUpdates = sub {
 		return 0 unless $self->validateValue($value->{$key}, ['string', 'undefined']);
 		if ($value->{$key} && $value->{$key} =~ m/^[+\*\/-]=\s*(.*)$/) {
 			my $val = $1;
-			if (!$self->validateValue($val, ['number', 'variableRef'])) {
+			if (!$self->validateValue($val, ['number', 'variableRef', 'functionCall'])) {
 				return $self->fail('"VariableUpdate" operator indicates a number, but the value is not a number', $value->{$key});
 			}
 		}
@@ -310,7 +310,7 @@ my $variableUpdates = sub {
 	return 1;
 };
 my $variableRef = sub {
-	### Returns true if it si a straing containing a variable name encased in any number of square bracket pairs
+	### Returns true if it is a straing containing a variable name encased in any number of square bracket pairs
 	my ($self, $value) = @_;
 	return 0 if ref $value;
 	$value =~ m/^([[]+)\s*(.*)\s*([]]+)$/;
@@ -412,6 +412,7 @@ my %validations = (
 	nonNegInt        => '^[0-9]+\z', # Looks like a non-negative integer
 	number           => '^(-?[1-9][0-9]*|0)(\.[0-9]+)?\z', # Looks like a number
 	uuid             => '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z',
+	functionCall     => '^[a-zA-Z_]+\(.*\)\z',
 	namecat          => $namecat,
 	elementList      => $elementList,
 	itemTextNested   => $itemTextNested,

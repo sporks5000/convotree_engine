@@ -473,6 +473,41 @@
 
 				return modifiedHover;
 			},
+			expandVariableReference: function(self, varString) {
+				varString = String(varString);
+
+				if (/^\[.*\]$/.test(varString)) {
+					const getVar = /^([[]+)\s*(.*)\s*([]]+)$/;
+					matching = checkOp.exec(varString);
+					let o = matching[1];
+					let e = matching[3];
+					let name = matching[2];
+
+					if (/\(.*\)$/.test(name)) {
+						o = o.substring(1);
+						e = e.substring(1);
+						// ##### TODO: It's a function
+					}
+
+					while (o.length && e.length) {
+						o = o.substring(1);
+						e = e.substring(1);
+						if (CTE.regex.varName.test(name)) {
+							name = self.getVariableValue(varName) ?? '';
+							if (typeof name === 'number') {
+								name = String(name);
+							}
+						}
+						else {
+							name = '';
+						}
+					};
+
+					varString = o + name + e;
+				}
+
+				return varString;
+			},
 			parseItemText: function(self, speaker, text) {
 				/* Given a text string containing minimal markup, parse that markup and
 				   return a string of HTML*/
@@ -694,6 +729,9 @@
 								let [varName, condValue] = andStrings[j].split(/!==|[!><=]=|[=><]/);
 								varName = varName.trim();
 								condValue = condValue.trim();
+
+								// If it's a reference to another variable, get the actual value we're supposed ot be looking at
+								condValue = CTE.utils.expandVariableReference(self, condValue);
 
 								// Add back in any quoted strings
 								while (/\x00/.test(condValue)) {
@@ -1254,33 +1292,7 @@
 			let val = matching[2];
 
 			if (/^\[.*\]$/.test(val)) {
-				const getVar = /^([[]+)\s*(.*)\s*([]]+)$/;
-				matching = checkOp.exec(val);
-				let o = matching[1];
-				let e = matching[3];
-				let name = matching[2];
-
-				if (/\(.*\)$/.test(name)) {
-					o = o.substring(1);
-					e = e.substring(1);
-					// ##### TODO: It's a function
-				}
-
-				while (o.length && e.length) {
-					o = o.substring(1);
-					e = e.substring(1);
-					if (CTE.regex.varName.test(name)) {
-						name = self.getVariableValue(varName) ?? '';
-						if (typeof name === 'number') {
-							name = String(name);
-						}
-					}
-					else {
-						name = '';
-					}
-				};
-
-				val = o + name + e;
+				val = CTE.utils.expandVariableReference(self, val);
 			}
 			else if (/^'.*'$/.test(val) || /^".*"$/.test(val)) {
 				// If the value is surrounded in quotes, remove those quotes
