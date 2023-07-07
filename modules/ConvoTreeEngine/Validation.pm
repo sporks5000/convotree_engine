@@ -297,13 +297,17 @@ my $variableUpdates = sub {
 	return 0 unless $self->validateValue($value, 'hash');
 	foreach my $key (keys %$value) {
 		return 0 unless $self->validateValue($key, 'variableName');
-		### The strings for updating numerical values could be parsed, but if they failed, we'd
-		### just check them against "string" anyway, and they'd pass that, so there's no point.
-		return 0 unless $self->validateValue($value->{$key}, ['string', 'undefined']);
-		if ($value->{$key} && $value->{$key} =~ m/^[+\*\/-]=\s*(.*)$/) {
-			my $val = $1;
-			if (!$self->validateValue($val, ['number', 'variableRef', 'functionCall'])) {
-				return $self->fail('"VariableUpdate" operator indicates a number, but the value is not a number', $value->{$key});
+		my $val = $value->{$key};
+		$val = [$val] unless (ref($val) || '') eq 'ARRAY';
+		foreach my $deep (@$val) {
+			### The strings for updating numerical values could be parsed, but if they failed, we'd
+			### just check them against "string" anyway, and they'd pass that, so there's no point.
+			return 0 unless $self->validateValue($deep, ['string', 'undefined']);
+			if ($deep && $deep =~ m/^[+\*\/-]=\s*(.*)$/) {
+				my $val = $1;
+				if (!$self->validateValue($val, ['number', 'variableRef', 'functionCall'])) {
+					return $self->fail('"VariableUpdate" operator indicates a number, but the value is not a number', $deep);
+				}
 			}
 		}
 	}

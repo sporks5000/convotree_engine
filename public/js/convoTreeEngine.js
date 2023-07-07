@@ -1277,70 +1277,86 @@
 
 			self.saveState = true;
 
-			if (typeof value === 'number') {
-				value = String(value);
+			if (!Array.isArray(value)) {
+				value = [value];
 			}
-			else if (value === null) {
+
+			let result;
+			for (let i = 0; i < value.length; i++) {
+				if (typeof value[i] === 'number') {
+					value[i] = String(value[i]);
+				}
+				else if (value[i] === null) {
+					// If it's null, delete the variable name from the variables hash
+					result = null;
+					continue;
+				}
+
+				const checkOp = /^\s*([+*\/-]=)?\s*(.*)\s*$/;
+				let matching = checkOp.exec(value[i]);
+				let operator = matching[1];
+				let val = matching[2];
+
+				if (/^\[.*\]$/.test(val)) {
+					val = CTE.utils.expandVariableReference(self, val);
+				}
+				else if (/^'.*'$/.test(val) || /^".*"$/.test(val)) {
+					// If the value is surrounded in quotes, remove those quotes
+					val = val.substring(1, val.length - 1);
+				}
+
+				if (operator !== null) {
+					if (!CTE.regex.number.test(val)) {
+						// If we're performing an operation, and the value is not a number, leave it the same
+						continue;
+					}
+
+					val = Number(val);
+
+					// If the value indicates that we're updating a numerical value. I.E. "+=3"
+					let current = result;
+					current ??= self.getVariableValue(varName) ?? 0;
+					if (typeof current === 'string') {
+						if (CTE.regex.number.test(current)) {
+							current = Number(current);
+						}
+						else {
+							// If the current value has non-numerical characters, leave it the same
+							continue;
+						}
+					}
+
+					if (operator === '+=') {
+						current += val;
+					}
+					else if (operator === '-=') {
+						current += val;
+					}
+					else if (operator === '*=') {
+						current *= val;
+					}
+					else if (operator === '/=') {
+						current /= val;
+					}
+
+					result = current;
+				}
+				else if (CTE.regex.number.test(val)) {
+					// If the value is just a number
+					result = Number(val);
+				}
+				else {
+					// If the value is a string
+					result = val;
+				}
+			}
+
+			if (result === null) {
 				// If it's null, delete the variable name from the variables hash
 				delete self.variables[varName];
-				return;
-			}
-
-			const checkOp = /^\s*([+*\/-]=)?\s*(.*)\s*$/;
-			let matching = checkOp.exec(value);
-			let operator = matching[1];
-			let val = matching[2];
-
-			if (/^\[.*\]$/.test(val)) {
-				val = CTE.utils.expandVariableReference(self, val);
-			}
-			else if (/^'.*'$/.test(val) || /^".*"$/.test(val)) {
-				// If the value is surrounded in quotes, remove those quotes
-				val = val.substring(1, val.length - 1);
-			}
-
-			if (operator !== null) {
-				if (!CTE.regex.number.test(val)) {
-					// If we're performing an operation, and the value is not a number, leave it the same
-					return;
-				}
-
-				val = Number(val);
-
-				// If the value indicates that we're updating a numerical value. I.E. "+=3"
-				let current = self.getVariableValue(varName) ?? 0;
-				if (typeof current === 'string') {
-					if (CTE.regex.number.test(current)) {
-						current = Number(current);
-					}
-					else {
-						// If the current value has non-numerical characters, leave it the same
-						return;
-					}
-				}
-
-				if (operator === '+=') {
-					current += val;
-				}
-				else if (operator === '-=') {
-					current += val;
-				}
-				else if (operator === '*=') {
-					current *= val;
-				}
-				else if (operator === '/=') {
-					current /= val;
-				}
-
-				self.variables[varName] = current;
-			}
-			else if (CTE.regex.number.test(val)) {
-				// If the value is just a number
-				self.variables[varName] = Number(val);
 			}
 			else {
-				// If the value is a string
-				self.variables[varName] = val;
+				self.variables[varName] = result;
 			}
 		}
 

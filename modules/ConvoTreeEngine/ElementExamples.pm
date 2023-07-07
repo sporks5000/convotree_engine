@@ -215,6 +215,10 @@ $examples{variable} = {
 		var2 => 'string',
 		var3 => '+=1',
 		var4 => '+= [var3]',
+		var5 => [
+			'[var3]',
+			'+=1',
+		],
 	},
 	arbit  => {
 		"Additional details" => {
